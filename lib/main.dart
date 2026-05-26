@@ -15,6 +15,7 @@ import 'package:unihub/screens/functionality/login_screen.dart';
 import 'package:unihub/screens/functionality/profile_screen.dart';
 import 'package:unihub/screens/functionality/resources_screen.dart';
 import 'package:unihub/screens/functionality/signup_screen.dart';
+import 'package:unihub/screens/functionality/today_screen.dart';
 import 'package:unihub/screens/ui/noise_overlay.dart';
 import 'package:unihub/services/notification_service.dart';
 import 'package:unihub/supabase/supabase_config.dart';
@@ -576,11 +577,12 @@ class _UniHubHomePageState extends State<UniHubHomePage> {
   }
 
   List<Widget> get _screens => <Widget>[
+    const TodayScreen(),
     const ResourcesScreen(),
     const CalendarScreen(),
     GradesScreen(
       coursesVersion: _coursesVersion,
-      isActive: _controller.index == 2,
+      isActive: _controller.index == 3,
     ),
     ProfileScreen(
       onLogout: widget.onLogout,
@@ -593,6 +595,13 @@ class _UniHubHomePageState extends State<UniHubHomePage> {
 
   List<PersistentBottomNavBarItem> _navBarsItems() {
     return [
+      PersistentBottomNavBarItem(
+        icon: const Icon(Icons.dashboard_rounded),
+        title: ("Astazi"),
+        activeColorPrimary: Theme.of(context).colorScheme.primary,
+        activeColorSecondary: Colors.black,
+        inactiveColorPrimary: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
       PersistentBottomNavBarItem(
         icon: const Icon(Icons.calendar_month_rounded),
         title: ("Orar"),
