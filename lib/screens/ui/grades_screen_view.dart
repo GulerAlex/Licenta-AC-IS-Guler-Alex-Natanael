@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'dart:ui' as ui;
-import 'package:unihub/screens/ui/noise_overlay.dart';
 
 class SubjectNoteCardData {
   const SubjectNoteCardData({
@@ -51,39 +50,13 @@ class _GradesScreenViewState extends State<GradesScreenView> {
   @override
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Stack(
       children: [
-        // Enhanced vibrant gradient background
-        Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: isDark
-                  ? [
-                      Colors.grey.shade900,
-                      Colors.black,
-                      Colors.black,
-                      Colors.grey.shade900,
-                    ]
-                  : [
-                      Colors.grey.shade100,
-                      Colors.white,
-                      Colors.white,
-                      Colors.grey.shade100,
-                    ],
-              stops: const [0.0, 0.3, 0.7, 1.0],
-            ),
-          ),
-        ),
-        const NoiseOverlay(),
         // Main content
         RefreshIndicator(
           onRefresh: widget.onRefresh,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            padding: const EdgeInsets.fromLTRB(16, 60, 16, 24),
             children: <Widget>[
               // Modern summary card with glass morphism
               _buildSummaryCard(colors),

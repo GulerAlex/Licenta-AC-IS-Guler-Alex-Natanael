@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:unihub/screens/functionality/forgot_password_screen.dart';
 import 'package:unihub/screens/ui/login_screen_view.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -94,6 +95,14 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> _goToForgotPassword() {
+    return Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (BuildContext context) => const ForgotPasswordScreen(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -117,6 +126,7 @@ class _LoginScreenState extends State<LoginScreen> {
           },
           onSubmit: _submit,
           onOpenSignUp: _goToSignUp,
+          onOpenForgotPassword: _goToForgotPassword,
           emailValidator: _validateEmail,
           passwordValidator: _validatePassword,
         ),

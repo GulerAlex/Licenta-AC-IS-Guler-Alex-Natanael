@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:unihub/screens/ui/noise_overlay.dart';
 import 'dart:ui' as ui;
 
 class LoginScreenView extends StatefulWidget {
@@ -15,6 +16,7 @@ class LoginScreenView extends StatefulWidget {
     required this.onRememberMeChanged,
     required this.onSubmit,
     required this.onOpenSignUp,
+    required this.onOpenForgotPassword,
     required this.emailValidator,
     required this.passwordValidator,
   });
@@ -29,6 +31,7 @@ class LoginScreenView extends StatefulWidget {
   final ValueChanged<bool> onRememberMeChanged;
   final Future<void> Function() onSubmit;
   final Future<void> Function() onOpenSignUp;
+  final Future<void> Function() onOpenForgotPassword;
   final String? Function(String?) emailValidator;
   final String? Function(String?) passwordValidator;
 
@@ -137,29 +140,7 @@ class _LoginScreenViewState extends State<LoginScreenView>
 
     return Stack(
       children: [
-        // Enhanced vibrant gradient background
-        Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: isDark
-                  ? [
-                      Colors.green.withOpacity(0.15),
-                      Colors.grey.shade900,
-                      Colors.grey.shade900,
-                      Colors.green.withOpacity(0.15),
-                    ]
-                  : [
-                      Colors.green.withOpacity(0.1),
-                      Colors.grey.shade100,
-                      Colors.grey.shade100,
-                      Colors.green.withOpacity(0.1),
-                    ],
-              stops: const [0.0, 0.3, 0.7, 1.0],
-            ),
-          ),
-        ),
+        const GrainBackground(),
         // Main content
         Center(
           child: SingleChildScrollView(
@@ -358,36 +339,38 @@ class _LoginScreenViewState extends State<LoginScreenView>
                                       ),
                                     ),
                                     const SizedBox(height: 12),
-                                    // Forgot Password Link
-                                    Align(
-                                      alignment: Alignment.centerRight,
-                                      child: TextButton(
-                                        onPressed: () {},
-                                        style: TextButton.styleFrom(
-                                          padding: EdgeInsets.zero,
-                                          tapTargetSize:
-                                              MaterialTapTargetSize.shrinkWrap,
+                                    Row(
+                                      children: <Widget>[
+                                        Expanded(
+                                          child: _buildRememberMeCheckbox(
+                                            context: context,
+                                            colors: colors,
+                                          ),
                                         ),
-                                        child: Text(
-                                          'Ai uitat parola?',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .labelSmall
-                                              ?.copyWith(
-                                                color: colors.secondary,
-                                                fontWeight: FontWeight.w600,
-                                                fontSize: 12,
-                                              ),
+                                        TextButton(
+                                          onPressed:
+                                              widget.onOpenForgotPassword,
+                                          style: TextButton.styleFrom(
+                                            padding: EdgeInsets.zero,
+                                            minimumSize: Size.zero,
+                                            tapTargetSize: MaterialTapTargetSize
+                                                .shrinkWrap,
+                                          ),
+                                          child: Text(
+                                            'Ai uitat parola?',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .labelSmall
+                                                ?.copyWith(
+                                                  color: colors.secondary,
+                                                  fontWeight: FontWeight.w600,
+                                                  fontSize: 12,
+                                                ),
+                                          ),
                                         ),
-                                      ),
+                                      ],
                                     ),
-                                    const SizedBox(height: 4),
-                                    // Remember Me Checkbox
-                                    _buildRememberMeCheckbox(
-                                      context: context,
-                                      colors: colors,
-                                    ),
-                                    const SizedBox(height: 24),
+                                    const SizedBox(height: 20),
                                     // Login Button with Hover Effects
                                     _buildModernButton(
                                       context: context,
@@ -576,6 +559,7 @@ class _LoginScreenViewState extends State<LoginScreenView>
     required ColorScheme colors,
   }) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Transform.scale(
           scale: 0.9,

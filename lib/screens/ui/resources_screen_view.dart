@@ -47,247 +47,233 @@ class ResourcesScreenView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final bool isLoading = connectionState == ConnectionState.waiting;
 
     return Stack(
       children: [
-        Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: isDark
-                  ? [
-                      Colors.green.withOpacity(0.15),
-                      Colors.grey.shade900,
-                      Colors.grey.shade900,
-                      Colors.green.withOpacity(0.15),
-                    ]
-                  : [
-                      Colors.green.withOpacity(0.1),
-                      Colors.grey.shade100,
-                      Colors.grey.shade100,
-                      Colors.green.withOpacity(0.1),
-                    ],
-              stops: const [0.0, 0.3, 0.7, 1.0],
-            ),
-          ),
-        ),
         RefreshIndicator(
           onRefresh: onRefresh,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            padding: const EdgeInsets.fromLTRB(16, 60, 16, 24),
             children: <Widget>[
-          if (isLoading)
-            const Padding(
-              padding: EdgeInsets.only(top: 48),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else if (hasError)
-            ResourcesLoadError(onRetry: onRetry)
-          else ...<Widget>[
-            _GlassCard(
-              colors: colors,
-              radius: 18,
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
-              child: Column(
-                children: <Widget>[
-                  Row(
+              if (isLoading)
+                const Padding(
+                  padding: EdgeInsets.only(top: 48),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (hasError)
+                ResourcesLoadError(onRetry: onRetry)
+              else ...<Widget>[
+                _GlassCard(
+                  colors: colors,
+                  radius: 18,
+                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+                  child: Column(
                     children: <Widget>[
-                      Expanded(
-                        child: Text(
-                          'Orar din saptamana curenta',
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w700),
-                        ),
+                      Row(
+                        children: <Widget>[
+                          Expanded(
+                            child: Text(
+                              'Orar din saptamana curenta',
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: onGoToToday,
+                            icon: const Icon(Icons.today, size: 18),
+                            label: const Text('Astazi'),
+                          ),
+                        ],
                       ),
-                      TextButton.icon(
-                        onPressed: onGoToToday,
-                        icon: const Icon(Icons.today, size: 18),
-                        label: const Text('Astazi'),
+                      TableCalendar<Course>(
+                        firstDay: firstVisibleDay,
+                        lastDay: DateTime.utc(2030, 12, 31),
+                        focusedDay: focusedDay,
+                        selectedDayPredicate: (DateTime day) {
+                          return isSameDay(day, selectedDay);
+                        },
+                        calendarFormat: calendarFormat,
+                        eventLoader: eventLoader,
+                        startingDayOfWeek: StartingDayOfWeek.monday,
+                        availableCalendarFormats:
+                            const <CalendarFormat, String>{
+                              CalendarFormat.week: 'Saptamana',
+                              CalendarFormat.twoWeeks: '2 saptamani',
+                              CalendarFormat.month: 'Luna',
+                            },
+                        onDaySelected: onDaySelected,
+                        onFormatChanged: onFormatChanged,
+                        onPageChanged: onPageChanged,
+                        calendarBuilders: CalendarBuilders<Course>(
+                          markerBuilder:
+                              (
+                                BuildContext context,
+                                DateTime day,
+                                List<Course> events,
+                              ) {
+                                final bool hasNote = hasNoteForDay(day);
+                                final int eventCount = events.length;
+                                if (!hasNote && eventCount == 0) {
+                                  return null;
+                                }
+
+                                final List<Color> markerColors = <Color>[];
+                                if (hasNote) {
+                                  markerColors.add(colors.tertiary);
+                                }
+
+                                final int maxCourseDots = hasNote ? 2 : 3;
+                                for (
+                                  int i = 0;
+                                  i < eventCount && i < maxCourseDots;
+                                  i++
+                                ) {
+                                  markerColors.add(colors.primary);
+                                }
+
+                                return Positioned(
+                                  bottom: 4,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: markerColors
+                                        .map(
+                                          (Color color) => Container(
+                                            margin: const EdgeInsets.symmetric(
+                                              horizontal: 1,
+                                            ),
+                                            width: 6,
+                                            height: 6,
+                                            decoration: BoxDecoration(
+                                              color: color,
+                                              shape: BoxShape.circle,
+                                            ),
+                                          ),
+                                        )
+                                        .toList(growable: false),
+                                  ),
+                                );
+                              },
+                        ),
+                        headerStyle: HeaderStyle(
+                          titleCentered: true,
+                          formatButtonDecoration: BoxDecoration(
+                            border: Border.all(color: colors.outlineVariant),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          formatButtonTextStyle: TextStyle(
+                            color: colors.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        calendarStyle: CalendarStyle(
+                          markersMaxCount: 3,
+                          markerSize: 5,
+                          markerDecoration: BoxDecoration(
+                            color: colors.primary,
+                            shape: BoxShape.circle,
+                          ),
+                          todayDecoration: BoxDecoration(
+                            color: colors.surfaceContainerHighest,
+                            shape: BoxShape.circle,
+                          ),
+                          selectedDecoration: BoxDecoration(
+                            color: colors.primary,
+                            shape: BoxShape.circle,
+                          ),
+                          selectedTextStyle: TextStyle(
+                            color: colors.onPrimary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          todayTextStyle: TextStyle(
+                            color: colors.onSurface,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
                     ],
                   ),
-                  TableCalendar<Course>(
-                    firstDay: firstVisibleDay,
-                    lastDay: DateTime.utc(2030, 12, 31),
-                    focusedDay: focusedDay,
-                    selectedDayPredicate: (DateTime day) {
-                      return isSameDay(day, selectedDay);
-                    },
-                    calendarFormat: calendarFormat,
-                    eventLoader: eventLoader,
-                    startingDayOfWeek: StartingDayOfWeek.monday,
-                    availableCalendarFormats: const <CalendarFormat, String>{
-                      CalendarFormat.week: 'Saptamana',
-                      CalendarFormat.twoWeeks: '2 saptamani',
-                      CalendarFormat.month: 'Luna',
-                    },
-                    onDaySelected: onDaySelected,
-                    onFormatChanged: onFormatChanged,
-                    onPageChanged: onPageChanged,
-                    calendarBuilders: CalendarBuilders<Course>(
-                      markerBuilder: (
-                        BuildContext context,
-                        DateTime day,
-                        List<Course> events,
-                      ) {
-                        final bool hasNote = hasNoteForDay(day);
-                        final int eventCount = events.length;
-                        if (!hasNote && eventCount == 0) {
-                          return null;
-                        }
-
-                        final List<Color> markerColors = <Color>[];
-                        if (hasNote) {
-                          markerColors.add(colors.tertiary);
-                        }
-
-                        final int maxCourseDots = hasNote ? 2 : 3;
-                        for (int i = 0;
-                            i < eventCount && i < maxCourseDots;
-                            i++) {
-                          markerColors.add(colors.primary);
-                        }
-
-                        return Positioned(
-                          bottom: 4,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: markerColors
-                                .map(
-                                  (Color color) => Container(
-                                    margin: const EdgeInsets.symmetric(
-                                      horizontal: 1,
-                                    ),
-                                    width: 6,
-                                    height: 6,
-                                    decoration: BoxDecoration(
-                                      color: color,
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                )
-                                .toList(growable: false),
-                          ),
-                        );
-                      },
-                    ),
-                    headerStyle: HeaderStyle(
-                      titleCentered: true,
-                      formatButtonDecoration: BoxDecoration(
-                        border: Border.all(color: colors.outlineVariant),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      formatButtonTextStyle: TextStyle(
-                        color: colors.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    calendarStyle: CalendarStyle(
-                      markersMaxCount: 3,
-                      markerSize: 5,
-                      markerDecoration: BoxDecoration(
-                        color: colors.primary,
-                        shape: BoxShape.circle,
-                      ),
-                      todayDecoration: BoxDecoration(
-                        color: colors.surfaceContainerHighest,
-                        shape: BoxShape.circle,
-                      ),
-                      selectedDecoration: BoxDecoration(
-                        color: colors.primary,
-                        shape: BoxShape.circle,
-                      ),
-                      selectedTextStyle: TextStyle(
-                        color: colors.onPrimary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                      todayTextStyle: TextStyle(
-                        color: colors.onSurface,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                ),
+                const SizedBox(height: 12),
+                _GlassCard(
+                  colors: colors,
+                  radius: 14,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            _GlassCard(
-              colors: colors,
-              radius: 14,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              child: Row(
-                children: <Widget>[
-                  Text(
-                    _formatSelectedDate(selectedDay),
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
+                  child: Row(
+                    children: <Widget>[
+                      Text(
+                        _formatSelectedDate(selectedDay),
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton.icon(
+                        onPressed: onOpenSelectedDayNoteEditor,
+                        icon: const Icon(Icons.note_add_outlined, size: 18),
+                        label: Text(
+                          (selectedDayNote ?? '').trim().isEmpty
+                              ? 'Adauga notita'
+                              : 'Editeaza notita',
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '${dailyCourses.length} ${dailyCourses.length == 1 ? 'curs' : 'cursuri'}',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  OutlinedButton.icon(
-                    onPressed: onOpenSelectedDayNoteEditor,
-                    icon: const Icon(Icons.note_add_outlined, size: 18),
-                    label: Text(
-                      (selectedDayNote ?? '').trim().isEmpty
-                          ? 'Adauga notita'
-                          : 'Editeaza notita',
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    '${dailyCourses.length} ${dailyCourses.length == 1 ? 'curs' : 'cursuri'}',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ],
-              ),
-            ),
-            if ((selectedDayNote ?? '').trim().isNotEmpty) ...<Widget>[
-              const SizedBox(height: 12),
-              _GlassCard(
-                colors: colors,
-                radius: 14,
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Row(
+                ),
+                if ((selectedDayNote ?? '').trim().isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 12),
+                  _GlassCard(
+                    colors: colors,
+                    radius: 14,
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        Icon(
-                          Icons.sticky_note_2_outlined,
-                          size: 18,
-                          color: colors.primary,
+                        Row(
+                          children: <Widget>[
+                            Icon(
+                              Icons.sticky_note_2_outlined,
+                              size: 18,
+                              color: colors.primary,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Notita zilei',
+                              style: Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Notita zilei',
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w700),
-                        ),
+                        const SizedBox(height: 8),
+                        Text(selectedDayNote!.trim()),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    Text(selectedDayNote!.trim()),
-                  ],
-                ),
-              ),
-            ],
-            const SizedBox(height: 12),
-            if (dailyCourses.isEmpty)
-              const Padding(
-                padding: EdgeInsets.only(top: 28),
-                child: Center(child: Text('Nu exista cursuri disponibile.')),
-              )
-            else
-              ...dailyCourses.map(
-                (Course course) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _CourseCard(course: course),
-                ),
-              ),
-          ],
+                  ),
+                ],
+                const SizedBox(height: 12),
+                if (dailyCourses.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 28),
+                    child: Center(
+                      child: Text('Nu exista cursuri disponibile.'),
+                    ),
+                  )
+                else
+                  ...dailyCourses.map(
+                    (Course course) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _CourseCard(course: course),
+                    ),
+                  ),
+              ],
             ],
           ),
         ),

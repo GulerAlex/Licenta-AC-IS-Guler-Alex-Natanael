@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:unihub/data/schedule_visibility_store.dart';
 import 'package:unihub/data/unihub_repository.dart';
 import 'package:unihub/models/course.dart';
 import 'package:unihub/screens/ui/resources_screen_view.dart';
@@ -18,6 +19,8 @@ class ResourcesScreen extends StatefulWidget {
 
 class _ResourcesScreenState extends State<ResourcesScreen> {
   final UniHubRepository _repository = UniHubRepository.instance;
+  final ScheduleVisibilityStore _visibilityStore =
+      ScheduleVisibilityStore.instance;
   static const String _notesStorageKey = 'resources_notes_by_day';
   static const String _deleteNoteAction = '@@DELETE@@';
   late DateTime _focusedDay;
@@ -25,6 +28,7 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
   CalendarFormat _calendarFormat = CalendarFormat.week;
   Map<String, String> _notesByDay = <String, String>{};
   List<Course> _customCourses = <Course>[];
+  Set<String> _hiddenScheduleSemesters = <String>{};
   bool _isLoadingCourses = false;
   bool _hasLoadError = false;
   RealtimeChannel? _coursesRealtimeChannel;
@@ -36,6 +40,7 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
     _focusedDay = _normalizedDate(DateTime.now());
     _selectedDay = _normalizedDate(DateTime.now());
     unawaited(_initializeData());
+    _visibilityStore.version.addListener(_handleScheduleVisibilityChanged);
     _subscribeToCoursesRealtime();
     _subscribeToNotesRealtime();
   }
@@ -50,13 +55,30 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
     if (notesChannel != null) {
       Supabase.instance.client.removeChannel(notesChannel);
     }
+    _visibilityStore.version.removeListener(_handleScheduleVisibilityChanged);
     super.dispose();
   }
 
   Future<void> _initializeData() async {
     await _migrateLocalNotesIfNeeded();
+    await _loadScheduleVisibility();
     await _loadNotes();
     await _syncCoursesFromSupabase(showLoader: false);
+  }
+
+  void _handleScheduleVisibilityChanged() {
+    unawaited(_loadScheduleVisibility());
+  }
+
+  Future<void> _loadScheduleVisibility() async {
+    final Set<String> hiddenSemesters = await _visibilityStore
+        .fetchHiddenSemesters();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _hiddenScheduleSemesters = hiddenSemesters;
+    });
   }
 
   void _subscribeToCoursesRealtime() {
@@ -116,8 +138,7 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
 
   Future<void> _loadNotes() async {
     try {
-      final Map<String, String> notes =
-          await _repository.fetchResourceNotes();
+      final Map<String, String> notes = await _repository.fetchResourceNotes();
       if (!mounted) {
         return;
       }
@@ -344,6 +365,7 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
     final List<Course> filtered = courses
         .where(
           (Course course) =>
+              !_hiddenScheduleSemesters.contains(course.semesterLabel) &&
               course.weekdayLabel == dayLabel &&
               course.time != UniHubRepository.pendingCourseTimeLabel,
         )

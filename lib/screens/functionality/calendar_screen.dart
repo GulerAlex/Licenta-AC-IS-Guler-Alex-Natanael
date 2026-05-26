@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:unihub/data/schedule_visibility_store.dart';
 import 'package:unihub/data/unihub_repository.dart';
 import 'package:unihub/models/course.dart';
 import 'package:unihub/screens/ui/calendar_screen_view.dart';
@@ -16,6 +17,8 @@ class CalendarScreen extends StatefulWidget {
 
 class _CalendarScreenState extends State<CalendarScreen> {
   final UniHubRepository _repository = UniHubRepository.instance;
+  final ScheduleVisibilityStore _visibilityStore =
+      ScheduleVisibilityStore.instance;
   static const List<String> _weekdayOptions = <String>[
     'Luni',
     'Marti',
@@ -37,12 +40,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
   bool _isDeletingCourse = false;
   bool _isDeletingCourseType = false;
   bool _isEditingCourseType = false;
+  bool _isUpdatingSemesterVisibility = false;
+  Set<String> _hiddenScheduleSemesters = <String>{};
   RealtimeChannel? _coursesRealtimeChannel;
 
   @override
   void initState() {
     super.initState();
     _coursesFuture = _loadCoursesForSemester(_selectedSemester);
+    unawaited(_loadScheduleVisibility());
     _subscribeToCoursesRealtime();
   }
 
@@ -91,6 +97,62 @@ class _CalendarScreenState extends State<CalendarScreen> {
       semesterLabel: semesterLabel,
     );
     return courses;
+  }
+
+  Future<void> _loadScheduleVisibility() async {
+    final Set<String> hiddenSemesters = await _visibilityStore
+        .fetchHiddenSemesters();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _hiddenScheduleSemesters = hiddenSemesters;
+    });
+  }
+
+  Future<void> _setSelectedSemesterScheduleVisibility(bool isVisible) async {
+    if (_isUpdatingSemesterVisibility) {
+      return;
+    }
+
+    setState(() {
+      _isUpdatingSemesterVisibility = true;
+    });
+
+    try {
+      await _visibilityStore.setSemesterVisible(
+        semesterLabel: _selectedSemester,
+        isVisible: isVisible,
+      );
+      await _loadScheduleVisibility();
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isVisible
+                ? '$_selectedSemester apare din nou in Orar.'
+                : '$_selectedSemester a fost ascuns din Orar.',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nu am putut actualiza vizibilitatea in Orar.'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUpdatingSemesterVisibility = false;
+        });
+      }
+    }
   }
 
   Future<void> _reload() async {
@@ -562,7 +624,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
         return CalendarScreenView(
           selectedSemester: _selectedSemester,
+          isSelectedSemesterVisibleInSchedule: !_hiddenScheduleSemesters
+              .contains(_selectedSemester),
+          isUpdatingSemesterVisibility: _isUpdatingSemesterVisibility,
           onSemesterChanged: _changeSemester,
+          onScheduleVisibilityChanged: _setSelectedSemesterScheduleVisibility,
           onAddCourse: _openAddCourseDialog,
           onDeleteCourse: _openDeleteCourseDialog,
           onSubjectTap: _openAddDetailsDialog,

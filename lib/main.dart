@@ -12,6 +12,7 @@ import 'package:unihub/screens/functionality/login_screen.dart';
 import 'package:unihub/screens/functionality/profile_screen.dart';
 import 'package:unihub/screens/functionality/resources_screen.dart';
 import 'package:unihub/screens/functionality/signup_screen.dart';
+import 'package:unihub/screens/ui/noise_overlay.dart';
 import 'package:unihub/supabase/supabase_config.dart';
 import 'package:persistent_bottom_nav_bar/persistent_bottom_nav_bar.dart';
 
@@ -143,13 +144,13 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF111111),
-          primary: const Color(0xFF111111),
-          secondary: const Color(0xFF666666),
-          surface: const Color(0xFFFFFFFF),
-          brightness: Brightness.light,
+          seedColor: const Color(0xFF35B86F),
+          primary: const Color(0xFF35B86F),
+          secondary: const Color(0xFF88A892),
+          surface: const Color(0xFF1D211D),
+          brightness: Brightness.dark,
         ),
-        scaffoldBackgroundColor: const Color(0xFFF7F7F7),
+        scaffoldBackgroundColor: const Color(0xFF111411),
         inputDecorationTheme: const InputDecorationTheme(
           border: OutlineInputBorder(),
         ),
@@ -480,32 +481,34 @@ class _UniHubHomePageState extends State<UniHubHomePage> {
     ProfileScreen(onLogout: widget.onLogout),
   ];
 
-  final List<String> _titles = <String>['Orar', 'Materii', 'Note', 'Profil'];
-
   List<PersistentBottomNavBarItem> _navBarsItems() {
     return [
       PersistentBottomNavBarItem(
         icon: const Icon(Icons.calendar_month_rounded),
         title: ("Orar"),
         activeColorPrimary: Theme.of(context).colorScheme.primary,
+        activeColorSecondary: Colors.black,
         inactiveColorPrimary: Theme.of(context).colorScheme.onSurfaceVariant,
       ),
       PersistentBottomNavBarItem(
         icon: const Icon(Icons.menu_book_rounded),
         title: ("Materii"),
         activeColorPrimary: Theme.of(context).colorScheme.primary,
+        activeColorSecondary: Colors.black,
         inactiveColorPrimary: Theme.of(context).colorScheme.onSurfaceVariant,
       ),
       PersistentBottomNavBarItem(
         icon: const Icon(Icons.grade_rounded),
         title: ("Note"),
         activeColorPrimary: Theme.of(context).colorScheme.primary,
+        activeColorSecondary: Colors.black,
         inactiveColorPrimary: Theme.of(context).colorScheme.onSurfaceVariant,
       ),
       PersistentBottomNavBarItem(
         icon: const Icon(Icons.person_outline_rounded),
         title: ("Profil"),
         activeColorPrimary: Theme.of(context).colorScheme.primary,
+        activeColorSecondary: Colors.black,
         inactiveColorPrimary: Theme.of(context).colorScheme.onSurfaceVariant,
       ),
     ];
@@ -513,44 +516,45 @@ class _UniHubHomePageState extends State<UniHubHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        backgroundColor: Colors.transparent,
-        foregroundColor: Theme.of(context).colorScheme.onSurface,
-        title: Text(
-          _titles[_controller.index],
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
-      ),
-      body: PersistentTabView(
-        context,
-        controller: _controller,
-        screens: _screens,
-        items: _navBarsItems(),
-        handleAndroidBackButtonPress: true, // Default is true.
-        resizeToAvoidBottomInset:
-            true, // This needs to be true if you want to move up the screen when keyboard appears. Default is true.
-        stateManagement: true, // Default is true.
-        hideNavigationBarWhenKeyboardAppears: true,
-        padding: const EdgeInsets.only(top: 8),
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        isVisible: true,
-        animationSettings: const NavBarAnimationSettings(
-          navBarItemAnimation: ItemAnimationSettings(
-            duration: Duration(milliseconds: 200),
-            curve: Curves.ease,
+    return Stack(
+      children: <Widget>[
+        const GrainBackground(),
+        Scaffold(
+          backgroundColor: Colors.transparent,
+          extendBody: true,
+          body: PersistentTabView(
+            context,
+            controller: _controller,
+            screens: _screens,
+            items: _navBarsItems(),
+            handleAndroidBackButtonPress: true, // Default is true.
+            resizeToAvoidBottomInset:
+                true, // This needs to be true if you want to move up the screen when keyboard appears. Default is true.
+            stateManagement: true, // Default is true.
+            hideNavigationBarWhenKeyboardAppears: true,
+            padding: const EdgeInsets.only(top: 8),
+            backgroundColor: Colors.transparent,
+            decoration: const NavBarDecoration(
+              colorBehindNavBar: Colors.transparent,
+            ),
+            margin: const EdgeInsets.fromLTRB(24, 0, 24, 26),
+            isVisible: true,
+            animationSettings: const NavBarAnimationSettings(
+              navBarItemAnimation: ItemAnimationSettings(
+                duration: Duration(milliseconds: 200),
+                curve: Curves.ease,
+              ),
+              screenTransitionAnimation: ScreenTransitionAnimationSettings(
+                animateTabTransition: false,
+              ),
+            ),
+            confineToSafeArea: true,
+            navBarHeight: kBottomNavigationBarHeight + 6,
+            navBarStyle: NavBarStyle
+                .style7, // Choose the nav bar style with this property
           ),
-          screenTransitionAnimation: ScreenTransitionAnimationSettings(
-            animateTabTransition: false,
-          ),
         ),
-        confineToSafeArea: true,
-        navBarHeight: kBottomNavigationBarHeight,
-        navBarStyle:
-            NavBarStyle.style7, // Choose the nav bar style with this property
-      ),
+      ],
     );
   }
 }

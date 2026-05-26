@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:unihub/screens/ui/noise_overlay.dart';
 import 'dart:ui' as ui;
 
 class SignUpScreenView extends StatefulWidget {
@@ -157,29 +158,7 @@ class _SignUpScreenViewState extends State<SignUpScreenView>
 
     return Stack(
       children: [
-        // Enhanced vibrant gradient background
-        Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: isDark
-                  ? [
-                      Colors.green.withOpacity(0.15),
-                      Colors.grey.shade900,
-                      Colors.grey.shade900,
-                      Colors.green.withOpacity(0.15),
-                    ]
-                  : [
-                      Colors.green.withOpacity(0.1),
-                      Colors.grey.shade100,
-                      Colors.grey.shade100,
-                      Colors.green.withOpacity(0.1),
-                    ],
-              stops: const [0.0, 0.3, 0.7, 1.0],
-            ),
-          ),
-        ),
+        const GrainBackground(),
         // Back button
         Positioned(
           top: 16,

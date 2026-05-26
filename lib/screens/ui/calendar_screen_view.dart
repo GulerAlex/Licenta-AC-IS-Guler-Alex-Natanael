@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'dart:ui' as ui;
 import 'package:unihub/models/course.dart';
-import 'package:unihub/screens/ui/noise_overlay.dart';
 
 class CalendarScreenView extends StatefulWidget {
   const CalendarScreenView({
     super.key,
     required this.selectedSemester,
+    required this.isSelectedSemesterVisibleInSchedule,
+    required this.isUpdatingSemesterVisibility,
     required this.onSemesterChanged,
+    required this.onScheduleVisibilityChanged,
     required this.onAddCourse,
     required this.onDeleteCourse,
     required this.onSubjectTap,
@@ -26,7 +28,10 @@ class CalendarScreenView extends StatefulWidget {
   });
 
   final String selectedSemester;
+  final bool isSelectedSemesterVisibleInSchedule;
+  final bool isUpdatingSemesterVisibility;
   final ValueChanged<String> onSemesterChanged;
+  final ValueChanged<bool> onScheduleVisibilityChanged;
   final Future<void> Function() onAddCourse;
   final Future<void> Function() onDeleteCourse;
   final ValueChanged<String> onSubjectTap;
@@ -56,43 +61,18 @@ class _CalendarScreenViewState extends State<CalendarScreenView> {
   @override
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Stack(
       children: [
-        // Enhanced vibrant gradient background
-        Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: isDark
-                  ? [
-                      Colors.grey.shade900,
-                      Colors.black,
-                      Colors.black,
-                      Colors.grey.shade900,
-                    ]
-                  : [
-                      Colors.grey.shade100,
-                      Colors.white,
-                      Colors.white,
-                      Colors.grey.shade100,
-                    ],
-              stops: const [0.0, 0.3, 0.7, 1.0],
-            ),
-          ),
-        ),
-        // Noise Texture
-        const NoiseOverlay(),
         // Main content
         RefreshIndicator(
           onRefresh: widget.onRefresh,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            padding: const EdgeInsets.fromLTRB(16, 60, 16, 24),
             children: <Widget>[
               // Modern semester selector
               _buildModernSemesterSelector(colors),
+              const SizedBox(height: 12),
+              _buildScheduleVisibilityToggle(colors),
               const SizedBox(height: 20),
               // Modern action buttons
               _buildActionButtons(colors),
@@ -158,6 +138,73 @@ class _CalendarScreenViewState extends State<CalendarScreenView> {
         onSelectionChanged: (Set<String> selection) {
           widget.onSemesterChanged(selection.first);
         },
+      ),
+    );
+  }
+
+  Widget _buildScheduleVisibilityToggle(ColorScheme colors) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+          decoration: BoxDecoration(
+            color: colors.primary.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: colors.primary.withOpacity(0.15),
+              width: 1.2,
+            ),
+          ),
+          child: Row(
+            children: <Widget>[
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: colors.primary.withOpacity(0.14),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  widget.isSelectedSemesterVisibleInSchedule
+                      ? Icons.visibility_rounded
+                      : Icons.visibility_off_rounded,
+                  color: colors.primary,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      'Vizibil in Orar',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      widget.isSelectedSemesterVisibleInSchedule
+                          ? '${widget.selectedSemester} apare in orarul saptamanal.'
+                          : '${widget.selectedSemester} este ascuns din orarul saptamanal.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: widget.isSelectedSemesterVisibleInSchedule,
+                onChanged: widget.isUpdatingSemesterVisibility
+                    ? null
+                    : widget.onScheduleVisibilityChanged,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

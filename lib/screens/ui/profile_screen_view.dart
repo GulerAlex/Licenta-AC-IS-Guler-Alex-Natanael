@@ -43,8 +43,6 @@ class _ProfileScreenViewState extends State<ProfileScreenView> {
   @override
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     final String subjectsValue = widget.isStatsLoading
         ? '...'
         : (widget.stats?.totalSubjects.toString() ?? '-');
@@ -59,34 +57,11 @@ class _ProfileScreenViewState extends State<ProfileScreenView> {
 
     return Stack(
       children: [
-        // Enhanced vibrant gradient background
-        Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: isDark
-                  ? [
-                      Colors.green.withOpacity(0.15),
-                      Colors.grey.shade900,
-                      Colors.grey.shade900,
-                      Colors.green.withOpacity(0.15),
-                    ]
-                  : [
-                      Colors.green.withOpacity(0.1),
-                      Colors.grey.shade100,
-                      Colors.grey.shade100,
-                      Colors.green.withOpacity(0.1),
-                    ],
-              stops: const [0.0, 0.3, 0.7, 1.0],
-            ),
-          ),
-        ),
         // Main content
         RefreshIndicator(
           onRefresh: widget.onRefresh,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            padding: const EdgeInsets.fromLTRB(16, 60, 16, 24),
             children: <Widget>[
               // Profile header card with glass morphism
               _buildProfileHeader(colors),
