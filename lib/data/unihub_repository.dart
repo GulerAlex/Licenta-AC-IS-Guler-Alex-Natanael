@@ -757,7 +757,7 @@ class UniHubRepository {
     if (subject.id.trim().isEmpty) {
       rows = await _client
           .from('subjects')
-          .insert(payload)
+          .upsert(payload, onConflict: 'user_id,name,semester_label')
           .select(
             'id, name, semester_label, credits, professor, color_hex, archived',
           );
