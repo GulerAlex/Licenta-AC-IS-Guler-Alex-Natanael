@@ -6,7 +6,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:unihub/models/academic_progress.dart';
 import 'package:unihub/data/unihub_repository.dart';
-import 'package:unihub/models/course.dart';
+import 'package:unihub/models/academic_subject_v2.dart';
+import 'package:unihub/models/class_session.dart';
+import 'package:unihub/models/grade_component_record.dart';
 import 'package:unihub/services/academic_progress_calculator.dart';
 import 'package:unihub/screens/ui/grades_screen_view.dart';
 
@@ -41,24 +43,21 @@ class _GradesScreenState extends State<GradesScreen> {
     'Laborator',
   ];
 
-  late Future<List<Course>> _coursesFuture;
+  late Future<_GradesData> _gradesDataFuture;
   String _selectedSubject = _allSubjectsValue;
-  Map<String, double> _typeGrades = <String, double>{};
-  Map<String, double> _typeWeights = <String, double>{};
-  RealtimeChannel? _coursesRealtimeChannel;
-  RealtimeChannel? _gradesRealtimeChannel;
-  RealtimeChannel? _weightsRealtimeChannel;
+  RealtimeChannel? _subjectsRealtimeChannel;
+  RealtimeChannel? _sessionsRealtimeChannel;
+  RealtimeChannel? _componentsRealtimeChannel;
 
   @override
   void initState() {
     super.initState();
-    _coursesFuture = _repository.fetchUserCourses();
-    _subscribeToCoursesRealtime();
-    _subscribeToGradesRealtime();
-    _subscribeToWeightsRealtime();
+    _gradesDataFuture = _loadGradesData();
+    _subscribeToSubjectsRealtime();
+    _subscribeToSessionsRealtime();
+    _subscribeToComponentsRealtime();
     _repository.coursesVersion.addListener(_handleCoursesChanged);
-    unawaited(_initializeGradesData());
-    unawaited(_loadTypeWeights());
+    unawaited(_migrateLocalGradesIfNeeded());
   }
 
   @override
@@ -72,17 +71,17 @@ class _GradesScreenState extends State<GradesScreen> {
 
   @override
   void dispose() {
-    final RealtimeChannel? coursesChannel = _coursesRealtimeChannel;
-    if (coursesChannel != null) {
-      Supabase.instance.client.removeChannel(coursesChannel);
+    final RealtimeChannel? subjectsChannel = _subjectsRealtimeChannel;
+    if (subjectsChannel != null) {
+      Supabase.instance.client.removeChannel(subjectsChannel);
     }
-    final RealtimeChannel? gradesChannel = _gradesRealtimeChannel;
-    if (gradesChannel != null) {
-      Supabase.instance.client.removeChannel(gradesChannel);
+    final RealtimeChannel? sessionsChannel = _sessionsRealtimeChannel;
+    if (sessionsChannel != null) {
+      Supabase.instance.client.removeChannel(sessionsChannel);
     }
-    final RealtimeChannel? weightsChannel = _weightsRealtimeChannel;
-    if (weightsChannel != null) {
-      Supabase.instance.client.removeChannel(weightsChannel);
+    final RealtimeChannel? componentsChannel = _componentsRealtimeChannel;
+    if (componentsChannel != null) {
+      Supabase.instance.client.removeChannel(componentsChannel);
     }
     _repository.coursesVersion.removeListener(_handleCoursesChanged);
     super.dispose();
@@ -97,22 +96,22 @@ class _GradesScreenState extends State<GradesScreen> {
       return;
     }
     setState(() {
-      _coursesFuture = _repository.fetchUserCourses();
+      _gradesDataFuture = _loadGradesData();
     });
   }
 
-  void _subscribeToCoursesRealtime() {
+  void _subscribeToSubjectsRealtime() {
     final User? user = Supabase.instance.client.auth.currentUser;
     if (user == null) {
       return;
     }
 
     final RealtimeChannel channel = Supabase.instance.client
-        .channel('note-courses-user-${user.id}')
+        .channel('note-subjects-user-${user.id}')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
-          table: 'courses',
+          table: 'subjects',
           filter: PostgresChangeFilter(
             type: PostgresChangeFilterType.eq,
             column: 'user_id',
@@ -123,74 +122,72 @@ class _GradesScreenState extends State<GradesScreen> {
               return;
             }
             setState(() {
-              _coursesFuture = _repository.fetchUserCourses();
+              _gradesDataFuture = _loadGradesData();
             });
           },
         )
         .subscribe();
 
-    _coursesRealtimeChannel = channel;
+    _subjectsRealtimeChannel = channel;
   }
 
-  void _subscribeToGradesRealtime() {
+  void _subscribeToSessionsRealtime() {
     final User? user = Supabase.instance.client.auth.currentUser;
     if (user == null) {
       return;
     }
 
     final RealtimeChannel channel = Supabase.instance.client
-        .channel('grade-grades-user-${user.id}')
+        .channel('note-class-sessions-user-${user.id}')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
-          table: 'grade_type_grades',
+          table: 'class_sessions',
           filter: PostgresChangeFilter(
             type: PostgresChangeFilterType.eq,
             column: 'user_id',
             value: user.id,
           ),
           callback: (PostgresChangePayload _) {
-            unawaited(_loadTypeGrades());
+            _refreshCourses();
           },
         )
         .subscribe();
 
-    _gradesRealtimeChannel = channel;
+    _sessionsRealtimeChannel = channel;
   }
 
-  void _subscribeToWeightsRealtime() {
+  void _subscribeToComponentsRealtime() {
     final User? user = Supabase.instance.client.auth.currentUser;
     if (user == null) {
       return;
     }
 
     final RealtimeChannel channel = Supabase.instance.client
-        .channel('grade-weights-user-${user.id}')
+        .channel('grade-components-user-${user.id}')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
-          table: 'grade_type_weights',
+          table: 'grade_components',
           filter: PostgresChangeFilter(
             type: PostgresChangeFilterType.eq,
             column: 'user_id',
             value: user.id,
           ),
           callback: (PostgresChangePayload _) {
-            unawaited(_loadTypeWeights());
+            _refreshCourses();
           },
         )
         .subscribe();
 
-    _weightsRealtimeChannel = channel;
+    _componentsRealtimeChannel = channel;
   }
 
   Future<void> _reload() async {
     setState(() {
-      _coursesFuture = _repository.fetchUserCourses();
+      _gradesDataFuture = _loadGradesData();
     });
-    await _coursesFuture;
-    await _loadTypeGrades();
-    await _loadTypeWeights();
+    await _gradesDataFuture;
   }
 
   String _notesStorageKey() {
@@ -199,22 +196,41 @@ class _GradesScreenState extends State<GradesScreen> {
     return 'note_type_grades_$userId';
   }
 
-  String _gradeKey({required String subjectName, required String courseType}) {
-    return '${subjectName.trim()}|${courseType.trim()}';
+  Future<_GradesData> _loadGradesData() async {
+    final List<AcademicSubjectV2> subjects = await _repository
+        .fetchSubjectsV2();
+    final List<ClassSession> sessions = await _repository
+        .fetchClassSessionsV2();
+    final List<GradeComponentRecord> components = await _repository
+        .fetchGradeComponentsV2();
+    return _GradesData(
+      subjects: subjects,
+      sessions: sessions,
+      components: components,
+    );
   }
 
-  String _weightKey({required String subjectName, required String courseType}) {
-    return '${subjectName.trim()}|${courseType.trim()}';
+  GradeComponentType _componentTypeFromRecordType(
+    GradeComponentRecordType type,
+  ) {
+    return switch (type) {
+      GradeComponentRecordType.exam => GradeComponentType.exam,
+      GradeComponentRecordType.seminar => GradeComponentType.seminar,
+      GradeComponentRecordType.laboratory => GradeComponentType.laboratory,
+      GradeComponentRecordType.project => GradeComponentType.project,
+      GradeComponentRecordType.coursework => GradeComponentType.coursework,
+      GradeComponentRecordType.other => GradeComponentType.other,
+    };
   }
 
-  GradeComponentType _componentTypeFromLabel(String label) {
+  GradeComponentRecordType _componentRecordTypeFromLabel(String label) {
     return switch (label.trim().toLowerCase()) {
-      'curs' || 'examen' => GradeComponentType.exam,
-      'seminar' => GradeComponentType.seminar,
-      'laborator' => GradeComponentType.laboratory,
-      'proiect' => GradeComponentType.project,
-      'activitate pe parcurs' => GradeComponentType.coursework,
-      _ => GradeComponentType.other,
+      'curs' || 'examen' => GradeComponentRecordType.exam,
+      'seminar' => GradeComponentRecordType.seminar,
+      'laborator' => GradeComponentRecordType.laboratory,
+      'proiect' => GradeComponentRecordType.project,
+      'activitate pe parcurs' => GradeComponentRecordType.coursework,
+      _ => GradeComponentRecordType.other,
     };
   }
 
@@ -231,49 +247,12 @@ class _GradesScreenState extends State<GradesScreen> {
   }
 
   bool _isEliminatoryComponent(String label) {
-    return switch (_componentTypeFromLabel(label)) {
-      GradeComponentType.seminar ||
-      GradeComponentType.laboratory ||
-      GradeComponentType.project => true,
+    return switch (_componentRecordTypeFromLabel(label)) {
+      GradeComponentRecordType.seminar ||
+      GradeComponentRecordType.laboratory ||
+      GradeComponentRecordType.project => true,
       _ => false,
     };
-  }
-
-  double? _gradeForComponent({
-    required String subjectName,
-    required String componentName,
-  }) {
-    return _typeGrades[_gradeKey(
-          subjectName: subjectName,
-          courseType: componentName,
-        )] ??
-        (componentName == 'Examen'
-            ? _typeGrades[_gradeKey(
-                subjectName: subjectName,
-                courseType: 'Curs',
-              )]
-            : null);
-  }
-
-  double? _weightForComponent({
-    required String subjectName,
-    required String componentName,
-  }) {
-    return _typeWeights[_weightKey(
-          subjectName: subjectName,
-          courseType: componentName,
-        )] ??
-        (componentName == 'Examen'
-            ? _typeWeights[_weightKey(
-                subjectName: subjectName,
-                courseType: 'Curs',
-              )]
-            : null);
-  }
-
-  Future<void> _initializeGradesData() async {
-    await _migrateLocalGradesIfNeeded();
-    await _loadTypeGrades();
   }
 
   Future<void> _migrateLocalGradesIfNeeded() async {
@@ -288,7 +267,7 @@ class _GradesScreenState extends State<GradesScreen> {
       return;
     }
 
-    final List<Map<String, dynamic>> items = <Map<String, dynamic>>[];
+    final Map<String, double> gradesByLegacyKey = <String, double>{};
     decoded.forEach((dynamic key, dynamic value) {
       final String parsedKey = key.toString().trim();
       if (parsedKey.isEmpty || !parsedKey.contains('|')) {
@@ -316,53 +295,158 @@ class _GradesScreenState extends State<GradesScreen> {
         return;
       }
 
-      items.add(<String, dynamic>{
-        'subject_name': subjectName,
-        'course_type': courseType,
-        'score': parsedValue,
-      });
+      gradesByLegacyKey['$subjectName|${_canonicalComponentName(courseType)}'] =
+          parsedValue;
     });
 
-    if (items.isEmpty) {
+    if (gradesByLegacyKey.isEmpty) {
       return;
     }
 
     try {
-      await _repository.upsertGradeTypeGrades(items);
+      final _GradesData data = await _loadGradesData();
+      for (final AcademicSubjectV2 subject in data.subjects) {
+        final List<GradeComponentRecord> components = _recordsForSubject(
+          subject: subject,
+          data: data,
+        );
+        for (final GradeComponentRecord component in components) {
+          final double? grade =
+              gradesByLegacyKey['${subject.name}|${component.name}'];
+          if (grade == null) {
+            continue;
+          }
+          await _repository.upsertGradeComponentV2(
+            _componentWithGrade(component, grade),
+          );
+        }
+      }
       await prefs.remove(_notesStorageKey());
+      _refreshCourses();
     } catch (e) {
       debugPrint('Failed to migrate local grades: $e');
     }
   }
 
-  Future<void> _loadTypeGrades() async {
-    try {
-      final Map<String, double> grades = await _repository
-          .fetchGradeTypeGrades();
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _typeGrades = grades;
-      });
-    } catch (e) {
-      debugPrint('Failed to load grade entries: $e');
-    }
+  AcademicSubjectV2 _findSubjectByName(_GradesData data, String subjectName) {
+    final String normalized = subjectName.trim().toLowerCase();
+    return data.subjects.firstWhere(
+      (AcademicSubjectV2 subject) =>
+          subject.name.trim().toLowerCase() == normalized,
+      orElse: () => throw StateError('Subject not found.'),
+    );
   }
 
-  Future<void> _loadTypeWeights() async {
-    try {
-      final Map<String, double> weights = await _repository
-          .fetchGradeTypeWeights();
-      if (!mounted) {
-        return;
+  List<GradeComponentRecord> _recordsForSubject({
+    required AcademicSubjectV2 subject,
+    required _GradesData data,
+  }) {
+    final List<GradeComponentRecord> stored = data.components
+        .where(
+          (GradeComponentRecord component) => component.subjectId == subject.id,
+        )
+        .toList(growable: false);
+    final Map<String, GradeComponentRecord> byName =
+        <String, GradeComponentRecord>{
+          for (final GradeComponentRecord component in stored)
+            component.name: component,
+        };
+
+    byName.putIfAbsent(
+      'Examen',
+      () => _defaultComponent(subjectId: subject.id, componentName: 'Examen'),
+    );
+
+    for (final ClassSession session in data.sessions.where(
+      (ClassSession session) => session.subjectId == subject.id,
+    )) {
+      final String componentName = _canonicalComponentName(session.sessionType);
+      if (componentName.isEmpty || componentName == 'Alta componenta') {
+        continue;
       }
-      setState(() {
-        _typeWeights = weights;
-      });
-    } catch (e) {
-      debugPrint('Failed to load grade weights: $e');
+      byName.putIfAbsent(
+        componentName,
+        () => _defaultComponent(
+          subjectId: subject.id,
+          componentName: componentName,
+        ),
+      );
     }
+
+    return byName.values.toList(growable: false)..sort((
+      GradeComponentRecord a,
+      GradeComponentRecord b,
+    ) {
+      final int aIndex = _courseTypeOptions.indexOf(a.name);
+      final int bIndex = _courseTypeOptions.indexOf(b.name);
+      final int normalizedA = aIndex == -1 ? _courseTypeOptions.length : aIndex;
+      final int normalizedB = bIndex == -1 ? _courseTypeOptions.length : bIndex;
+      return normalizedA.compareTo(normalizedB);
+    });
+  }
+
+  GradeComponentRecord _recordForComponentName({
+    required AcademicSubjectV2 subject,
+    required _GradesData data,
+    required String componentName,
+  }) {
+    final String normalized = _canonicalComponentName(componentName);
+    return _recordsForSubject(subject: subject, data: data).firstWhere(
+      (GradeComponentRecord component) => component.name == normalized,
+      orElse: () =>
+          _defaultComponent(subjectId: subject.id, componentName: normalized),
+    );
+  }
+
+  GradeComponentRecord _defaultComponent({
+    required String subjectId,
+    required String componentName,
+  }) {
+    return GradeComponentRecord(
+      id: '',
+      subjectId: subjectId,
+      name: componentName,
+      type: _componentRecordTypeFromLabel(componentName),
+      weightPercent: 0,
+      minimumGrade: 5,
+      grade: null,
+      isRequired: true,
+      isEliminatory: _isEliminatoryComponent(componentName),
+    );
+  }
+
+  GradeComponentRecord _componentWithGrade(
+    GradeComponentRecord component,
+    double? grade,
+  ) {
+    return GradeComponentRecord(
+      id: component.id,
+      subjectId: component.subjectId,
+      name: component.name,
+      type: component.type,
+      weightPercent: component.weightPercent,
+      minimumGrade: component.minimumGrade,
+      grade: grade,
+      isRequired: component.isRequired,
+      isEliminatory: component.isEliminatory,
+    );
+  }
+
+  GradeComponentRecord _componentWithWeight(
+    GradeComponentRecord component,
+    double weightPercent,
+  ) {
+    return GradeComponentRecord(
+      id: component.id,
+      subjectId: component.subjectId,
+      name: component.name,
+      type: component.type,
+      weightPercent: weightPercent,
+      minimumGrade: component.minimumGrade,
+      grade: component.grade,
+      isRequired: component.isRequired,
+      isEliminatory: component.isEliminatory,
+    );
   }
 
   Future<void> _saveTypeGrade({
@@ -371,27 +455,17 @@ class _GradesScreenState extends State<GradesScreen> {
     required double? value,
   }) async {
     try {
-      await _repository.setGradeTypeGrade(
-        subjectName: subjectName,
-        courseType: courseType,
-        score: value,
+      final _GradesData data = await _gradesDataFuture;
+      final AcademicSubjectV2 subject = _findSubjectByName(data, subjectName);
+      final GradeComponentRecord component = _recordForComponentName(
+        subject: subject,
+        data: data,
+        componentName: courseType,
       );
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        final String key = _gradeKey(
-          subjectName: subjectName,
-          courseType: courseType,
-        );
-        if (value == null) {
-          _typeGrades.remove(key);
-        } else {
-          _typeGrades[key] = value;
-        }
-      });
+      await _repository.upsertGradeComponentV2(
+        _componentWithGrade(component, value),
+      );
+      _refreshCourses();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -406,25 +480,22 @@ class _GradesScreenState extends State<GradesScreen> {
     required Map<String, double> weightsByType,
   }) async {
     try {
-      await _repository.setGradeTypeWeights(
+      final _GradesData data = await _gradesDataFuture;
+      final AcademicSubjectV2 subject = _findSubjectByName(data, subjectName);
+      for (final String componentName in _activeWeightTypes(
         subjectName: subjectName,
-        weightsByType: weightsByType,
-      );
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _typeWeights.removeWhere(
-          (String key, double _) => key.startsWith('${subjectName.trim()}|'),
+        data: data,
+      )) {
+        final GradeComponentRecord component = _recordForComponentName(
+          subject: subject,
+          data: data,
+          componentName: componentName,
         );
-        for (final MapEntry<String, double> entry in weightsByType.entries) {
-          _typeWeights[_weightKey(
-                subjectName: subjectName,
-                courseType: entry.key,
-              )] =
-              entry.value;
-        }
-      });
+        await _repository.upsertGradeComponentV2(
+          _componentWithWeight(component, weightsByType[componentName] ?? 0),
+        );
+      }
+      _refreshCourses();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -445,11 +516,28 @@ class _GradesScreenState extends State<GradesScreen> {
     String subjectName,
     String courseType,
   ) async {
-    final String key = _gradeKey(
-      subjectName: subjectName,
-      courseType: courseType,
+    final _GradesData data;
+    try {
+      data = await _gradesDataFuture;
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Nu s-au putut incarca notele.')),
+        );
+      }
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+
+    final AcademicSubjectV2 subject = _findSubjectByName(data, subjectName);
+    final GradeComponentRecord component = _recordForComponentName(
+      subject: subject,
+      data: data,
+      componentName: courseType,
     );
-    final double? existing = _typeGrades[key];
+    final double? existing = component.grade;
 
     final _TypeGradeDialogResult? result =
         await showDialog<_TypeGradeDialogResult>(
@@ -531,9 +619,9 @@ class _GradesScreenState extends State<GradesScreen> {
   }
 
   Future<void> _openTypeWeightDialog(String subjectName) async {
-    final List<Course> courses;
+    final _GradesData data;
     try {
-      courses = await _coursesFuture;
+      data = await _gradesDataFuture;
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -547,16 +635,18 @@ class _GradesScreenState extends State<GradesScreen> {
       return;
     }
 
+    final AcademicSubjectV2 subject = _findSubjectByName(data, subjectName);
     final List<String> activeWeightTypes = _activeWeightTypes(
       subjectName: subjectName,
-      courses: courses,
+      data: data,
     );
     final Map<String, double?> existing = <String, double?>{};
     for (final String courseType in activeWeightTypes) {
-      existing[courseType] = _weightForComponent(
-        subjectName: subjectName,
+      existing[courseType] = _recordForComponentName(
+        subject: subject,
+        data: data,
         componentName: courseType,
-      );
+      ).weightPercent;
     }
 
     final Map<String, TextEditingController> controllers =
@@ -693,13 +783,14 @@ class _GradesScreenState extends State<GradesScreen> {
 
   List<String> _activeWeightTypes({
     required String subjectName,
-    required List<Course> courses,
+    required _GradesData data,
   }) {
-    final Set<String> activeTypes = courses
-        .where((Course course) => course.name.trim() == subjectName.trim())
-        .map((Course course) => _canonicalComponentName(course.courseType))
-        .where(_weightTypeOptions.contains)
-        .toSet();
+    final AcademicSubjectV2 subject = _findSubjectByName(data, subjectName);
+    final Set<String> activeTypes =
+        _recordsForSubject(subject: subject, data: data)
+            .map((GradeComponentRecord component) => component.name)
+            .where(_weightTypeOptions.contains)
+            .toSet();
 
     if (activeTypes.isEmpty) {
       activeTypes.add('Examen');
@@ -710,9 +801,9 @@ class _GradesScreenState extends State<GradesScreen> {
         .toList(growable: false);
   }
 
-  List<String> _subjectOptions(List<Course> courses) {
-    final Set<String> subjectSet = courses
-        .map((Course course) => course.name.trim())
+  List<String> _subjectOptions(_GradesData data) {
+    final Set<String> subjectSet = data.subjects
+        .map((AcademicSubjectV2 subject) => subject.name.trim())
         .where((String subject) => subject.isNotEmpty)
         .toSet();
 
@@ -724,65 +815,35 @@ class _GradesScreenState extends State<GradesScreen> {
   }
 
   AcademicSubject _buildAcademicSubject({
-    required String subjectName,
-    required List<Course> courses,
+    required AcademicSubjectV2 subject,
+    required _GradesData data,
   }) {
-    final List<Course> subjectCourses = courses
-        .where((Course course) => course.name.trim() == subjectName)
-        .toList(growable: false);
-    final int credits = subjectCourses.fold<int>(
-      0,
-      (int currentMax, Course course) =>
-          course.credits > currentMax ? course.credits : currentMax,
+    final List<GradeComponentRecord> records = _recordsForSubject(
+      subject: subject,
+      data: data,
     );
-    final String semester = subjectCourses.isEmpty
-        ? ''
-        : subjectCourses.first.semesterLabel;
 
-    final Set<String> componentNames = <String>{
-      ...subjectCourses
-          .map((Course course) => _canonicalComponentName(course.courseType))
-          .where((String type) => type.isNotEmpty),
-    };
-
-    if (componentNames.isEmpty) {
-      componentNames.add('Examen');
-    }
-
-    final bool hasConfiguredWeights = componentNames.any(
-      (String componentName) =>
-          (_weightForComponent(
-                subjectName: subjectName,
-                componentName: componentName,
-              ) ??
-              0) >
-          0,
+    final bool hasConfiguredWeights = records.any(
+      (GradeComponentRecord component) => component.weightPercent > 0,
     );
-    final double defaultWeight = componentNames.isEmpty
-        ? 0
-        : 1 / componentNames.length;
+    final double defaultWeight = records.isEmpty ? 0 : 1 / records.length;
 
     final List<GradeComponent> components =
-        componentNames
-            .map((String componentName) {
+        records
+            .map((GradeComponentRecord record) {
               return GradeComponent(
-                id: '$subjectName|$componentName',
-                name: componentName,
-                type: _componentTypeFromLabel(componentName),
-                grade: _gradeForComponent(
-                  subjectName: subjectName,
-                  componentName: componentName,
-                ),
+                id: record.id.isEmpty
+                    ? '${subject.id}|${record.name}'
+                    : record.id,
+                name: record.name,
+                type: _componentTypeFromRecordType(record.type),
+                grade: record.grade,
                 weight: hasConfiguredWeights
-                    ? ((_weightForComponent(
-                                subjectName: subjectName,
-                                componentName: componentName,
-                              ) ??
-                              0) /
-                          100)
+                    ? record.weightPercent / 100
                     : defaultWeight,
-                isRequired: true,
-                isEliminatory: _isEliminatoryComponent(componentName),
+                minGrade: record.minimumGrade,
+                isRequired: record.isRequired,
+                isEliminatory: record.isEliminatory,
               );
             })
             .toList(growable: false)
@@ -799,40 +860,37 @@ class _GradesScreenState extends State<GradesScreen> {
           });
 
     return AcademicSubject(
-      id: subjectName,
-      name: subjectName,
-      semester: semester,
+      id: subject.id,
+      name: subject.name,
+      semester: subject.semesterLabel,
       year: 0,
-      credits: credits,
+      credits: subject.credits,
       components: components,
     );
   }
 
   List<SubjectNoteCardData> _buildSubjectCards({
-    required List<Course> courses,
+    required _GradesData data,
     required String selectedSubject,
   }) {
-    final List<String> subjects =
-        courses
-            .map((Course course) => course.name.trim())
-            .where((String subject) => subject.isNotEmpty)
-            .toSet()
-            .toList(growable: false)
-          ..sort(
-            (String a, String b) => a.toLowerCase().compareTo(b.toLowerCase()),
-          );
+    final List<AcademicSubjectV2> subjects =
+        List<AcademicSubjectV2>.of(data.subjects)..sort(
+          (AcademicSubjectV2 a, AcademicSubjectV2 b) =>
+              a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        );
 
     final List<SubjectNoteCardData> cards = <SubjectNoteCardData>[];
 
-    for (final String subjectName in subjects) {
+    for (final AcademicSubjectV2 subjectModel in subjects) {
+      final String subjectName = subjectModel.name;
       if (selectedSubject != _allSubjectsValue &&
           selectedSubject != subjectName) {
         continue;
       }
 
       final AcademicSubject subject = _buildAcademicSubject(
-        subjectName: subjectName,
-        courses: courses,
+        subject: subjectModel,
+        data: data,
       );
       final SubjectEvaluation evaluation =
           AcademicProgressCalculator.evaluateSubject(subject);
@@ -895,9 +953,9 @@ class _GradesScreenState extends State<GradesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<Course>>(
-      future: _coursesFuture,
-      builder: (BuildContext context, AsyncSnapshot<List<Course>> snapshot) {
+    return FutureBuilder<_GradesData>(
+      future: _gradesDataFuture,
+      builder: (BuildContext context, AsyncSnapshot<_GradesData> snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -906,13 +964,19 @@ class _GradesScreenState extends State<GradesScreen> {
           return GradesLoadError(onRetry: _reload);
         }
 
-        final List<Course> courses = snapshot.data ?? <Course>[];
-        final List<String> subjectOptions = _subjectOptions(courses);
+        final _GradesData data =
+            snapshot.data ??
+            const _GradesData(
+              subjects: <AcademicSubjectV2>[],
+              sessions: <ClassSession>[],
+              components: <GradeComponentRecord>[],
+            );
+        final List<String> subjectOptions = _subjectOptions(data);
         final String selectedSubject = subjectOptions.contains(_selectedSubject)
             ? _selectedSubject
             : _allSubjectsValue;
         final List<SubjectNoteCardData> subjectCards = _buildSubjectCards(
-          courses: courses,
+          data: data,
           selectedSubject: selectedSubject,
         );
 
@@ -952,4 +1016,16 @@ class _TypeWeightDialogResult {
 
   final Map<String, double> weightsByType;
   final bool delete;
+}
+
+class _GradesData {
+  const _GradesData({
+    required this.subjects,
+    required this.sessions,
+    required this.components,
+  });
+
+  final List<AcademicSubjectV2> subjects;
+  final List<ClassSession> sessions;
+  final List<GradeComponentRecord> components;
 }
