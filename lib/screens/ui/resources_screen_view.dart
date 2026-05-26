@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:unihub/models/course.dart';
+import 'package:unihub/models/exam_event.dart';
 
 class ResourcesScreenView extends StatelessWidget {
   const ResourcesScreenView({
@@ -12,14 +13,22 @@ class ResourcesScreenView extends StatelessWidget {
     required this.firstVisibleDay,
     required this.calendarFormat,
     required this.dailyCourses,
+    required this.dailyExams,
     required this.selectedDayNote,
     required this.hasNoteForDay,
+    required this.hasExamForDay,
     required this.onOpenSelectedDayNoteEditor,
+    required this.onOpenAddExam,
+    required this.onEditExam,
+    required this.onDeleteExam,
+    required this.onOpenNotificationSettings,
     required this.onGoToToday,
     required this.onDaySelected,
     required this.onFormatChanged,
     required this.onPageChanged,
     required this.eventLoader,
+    required this.courseNotificationsEnabled,
+    required this.examNotificationsEnabled,
     required this.onRefresh,
     required this.connectionState,
     required this.hasError,
@@ -31,14 +40,22 @@ class ResourcesScreenView extends StatelessWidget {
   final DateTime firstVisibleDay;
   final CalendarFormat calendarFormat;
   final List<Course> dailyCourses;
+  final List<ExamEvent> dailyExams;
   final String? selectedDayNote;
   final bool Function(DateTime day) hasNoteForDay;
+  final bool Function(DateTime day) hasExamForDay;
   final Future<void> Function() onOpenSelectedDayNoteEditor;
+  final Future<void> Function() onOpenAddExam;
+  final Future<void> Function(ExamEvent exam) onEditExam;
+  final Future<void> Function(ExamEvent exam) onDeleteExam;
+  final Future<void> Function() onOpenNotificationSettings;
   final VoidCallback onGoToToday;
   final void Function(DateTime selectedDay, DateTime focusedDay) onDaySelected;
   final ValueChanged<CalendarFormat> onFormatChanged;
   final ValueChanged<DateTime> onPageChanged;
   final List<Course> Function(DateTime day) eventLoader;
+  final bool courseNotificationsEnabled;
+  final bool examNotificationsEnabled;
   final Future<void> Function() onRefresh;
   final ConnectionState connectionState;
   final bool hasError;
@@ -48,13 +65,15 @@ class ResourcesScreenView extends StatelessWidget {
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
     final bool isLoading = connectionState == ConnectionState.waiting;
+    final double bottomContentPadding =
+        MediaQuery.paddingOf(context).bottom + kBottomNavigationBarHeight + 120;
 
     return Stack(
       children: [
         RefreshIndicator(
           onRefresh: onRefresh,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 60, 16, 24),
+            padding: EdgeInsets.fromLTRB(16, 60, 16, bottomContentPadding),
             children: <Widget>[
               if (isLoading)
                 const Padding(
@@ -113,17 +132,22 @@ class ResourcesScreenView extends StatelessWidget {
                                 List<Course> events,
                               ) {
                                 final bool hasNote = hasNoteForDay(day);
+                                final bool hasExam = hasExamForDay(day);
                                 final int eventCount = events.length;
-                                if (!hasNote && eventCount == 0) {
+                                if (!hasNote && !hasExam && eventCount == 0) {
                                   return null;
                                 }
 
                                 final List<Color> markerColors = <Color>[];
+                                if (hasExam) {
+                                  markerColors.add(colors.error);
+                                }
                                 if (hasNote) {
                                   markerColors.add(colors.tertiary);
                                 }
 
-                                final int maxCourseDots = hasNote ? 2 : 3;
+                                final int maxCourseDots =
+                                    3 - markerColors.length;
                                 for (
                                   int i = 0;
                                   i < eventCount && i < maxCourseDots;
@@ -204,10 +228,11 @@ class ResourcesScreenView extends StatelessWidget {
                   ),
                   child: Row(
                     children: <Widget>[
-                      Text(
-                        _formatSelectedDate(selectedDay),
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
+                      Expanded(
+                        child: Text(
+                          _formatSelectedDate(selectedDay),
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -220,14 +245,37 @@ class ResourcesScreenView extends StatelessWidget {
                               : 'Editeaza notita',
                         ),
                       ),
-                      const Spacer(),
-                      Text(
-                        '${dailyCourses.length} ${dailyCourses.length == 1 ? 'curs' : 'cursuri'}',
-                        style: Theme.of(context).textTheme.bodyMedium,
+                      const SizedBox(width: 8),
+                      IconButton(
+                        onPressed: onOpenNotificationSettings,
+                        tooltip: 'Reminder-e',
+                        icon: Icon(
+                          courseNotificationsEnabled || examNotificationsEnabled
+                              ? Icons.notifications_active_rounded
+                              : Icons.notifications_none_rounded,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: onOpenAddExam,
+                        tooltip: 'Adauga examen',
+                        icon: const Icon(Icons.add_task_rounded),
                       ),
                     ],
                   ),
                 ),
+                if (dailyExams.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 12),
+                  ...dailyExams.map(
+                    (ExamEvent exam) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _ExamCard(
+                        exam: exam,
+                        onEdit: () => onEditExam(exam),
+                        onDelete: () => onDeleteExam(exam),
+                      ),
+                    ),
+                  ),
+                ],
                 if ((selectedDayNote ?? '').trim().isNotEmpty) ...<Widget>[
                   const SizedBox(height: 12),
                   _GlassCard(
@@ -259,7 +307,7 @@ class ResourcesScreenView extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(height: 12),
-                if (dailyCourses.isEmpty)
+                if (dailyCourses.isEmpty && dailyExams.isEmpty)
                   const Padding(
                     padding: EdgeInsets.only(top: 28),
                     child: Center(
@@ -308,24 +356,145 @@ class _GlassCard extends StatelessWidget {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                colors.primary.withOpacity(0.12),
-                colors.secondary.withOpacity(0.08),
+                colors.primary.withValues(alpha: 0.12),
+                colors.secondary.withValues(alpha: 0.08),
               ],
             ),
             borderRadius: BorderRadius.circular(radius),
             border: Border.all(
-              color: colors.primary.withOpacity(0.2),
+              color: colors.primary.withValues(alpha: 0.2),
               width: 1.2,
             ),
             boxShadow: [
               BoxShadow(
-                color: colors.primary.withOpacity(0.08),
+                color: colors.primary.withValues(alpha: 0.08),
                 blurRadius: 12,
                 offset: const Offset(0, 6),
               ),
             ],
           ),
           child: child,
+        ),
+      ),
+    );
+  }
+}
+
+class _ExamCard extends StatelessWidget {
+  const _ExamCard({
+    required this.exam,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final ExamEvent exam;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                colors.error.withValues(alpha: 0.14),
+                colors.tertiary.withValues(alpha: 0.08),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: colors.error.withValues(alpha: 0.28),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: colors.error.withValues(alpha: 0.08),
+                blurRadius: 12,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Text(
+                        exam.subjectName,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Chip(
+                      label: Text(exam.examType),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    PopupMenuButton<String>(
+                      onSelected: (String value) {
+                        if (value == 'edit') {
+                          onEdit();
+                        } else if (value == 'delete') {
+                          onDelete();
+                        }
+                      },
+                      itemBuilder: (BuildContext context) {
+                        return const <PopupMenuEntry<String>>[
+                          PopupMenuItem<String>(
+                            value: 'edit',
+                            child: Text('Editeaza'),
+                          ),
+                          PopupMenuItem<String>(
+                            value: 'delete',
+                            child: Text('Sterge'),
+                          ),
+                        ];
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                _DetailRow(
+                  icon: Icons.schedule_rounded,
+                  label: 'Ora',
+                  value: _formatTime(exam.startsAt),
+                ),
+                if (exam.room.trim().isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 8),
+                  _DetailRow(
+                    icon: Icons.room_outlined,
+                    label: 'Sala',
+                    value: exam.room,
+                  ),
+                ],
+                const SizedBox(height: 8),
+                _DetailRow(
+                  icon: exam.notificationsEnabled
+                      ? Icons.notifications_active_rounded
+                      : Icons.notifications_off_outlined,
+                  label: 'Reminder',
+                  value: exam.notificationsEnabled
+                      ? _formatReminder(exam.reminderMinutesBefore)
+                      : 'Dezactivat',
+                ),
+                if (exam.notes.trim().isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 8),
+                  Text(exam.notes.trim()),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -351,18 +520,18 @@ class _CourseCard extends StatelessWidget {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                colors.primary.withOpacity(0.12),
-                colors.secondary.withOpacity(0.08),
+                colors.primary.withValues(alpha: 0.12),
+                colors.secondary.withValues(alpha: 0.08),
               ],
             ),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: colors.primary.withOpacity(0.2),
+              color: colors.primary.withValues(alpha: 0.2),
               width: 1.2,
             ),
             boxShadow: [
               BoxShadow(
-                color: colors.primary.withOpacity(0.08),
+                color: colors.primary.withValues(alpha: 0.08),
                 blurRadius: 12,
                 offset: const Offset(0, 6),
               ),
@@ -459,7 +628,7 @@ class _DetailRow extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
-            color: colors.primary.withOpacity(0.15),
+            color: colors.primary.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(icon, size: 16, color: colors.primary),
@@ -499,4 +668,21 @@ String _formatSelectedDate(DateTime date) {
   ];
 
   return '${weekdays[date.weekday - 1]}, ${date.day} ${months[date.month - 1]}';
+}
+
+String _formatTime(DateTime date) {
+  return '${date.hour.toString().padLeft(2, '0')}:'
+      '${date.minute.toString().padLeft(2, '0')}';
+}
+
+String _formatReminder(int minutes) {
+  if (minutes >= 1440 && minutes % 1440 == 0) {
+    final int days = minutes ~/ 1440;
+    return days == 1 ? 'Cu 1 zi inainte' : 'Cu $days zile inainte';
+  }
+  if (minutes >= 60 && minutes % 60 == 0) {
+    final int hours = minutes ~/ 60;
+    return hours == 1 ? 'Cu 1 ora inainte' : 'Cu $hours ore inainte';
+  }
+  return 'Cu $minutes minute inainte';
 }

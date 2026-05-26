@@ -61,13 +61,15 @@ class _CalendarScreenViewState extends State<CalendarScreenView> {
   @override
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
+    final double bottomContentPadding =
+        MediaQuery.paddingOf(context).bottom + kBottomNavigationBarHeight + 120;
     return Stack(
       children: [
         // Main content
         RefreshIndicator(
           onRefresh: widget.onRefresh,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 60, 16, 24),
+            padding: EdgeInsets.fromLTRB(16, 60, 16, bottomContentPadding),
             children: <Widget>[
               // Modern semester selector
               _buildModernSemesterSelector(colors),

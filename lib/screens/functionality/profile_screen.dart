@@ -1,13 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:unihub/data/app_preferences_store.dart';
 import 'package:unihub/data/unihub_repository.dart';
+import 'package:unihub/models/course.dart';
 import 'package:unihub/models/profile_stats.dart';
 import 'package:unihub/models/user_profile.dart';
 import 'package:unihub/screens/ui/profile_screen_view.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key, required this.onLogout});
+  const ProfileScreen({
+    super.key,
+    required this.onLogout,
+    required this.themePreference,
+    required this.avatarColor,
+    required this.onThemePreferenceChanged,
+    required this.onAvatarColorChanged,
+  });
 
   final Future<void> Function() onLogout;
+  final AppThemePreference themePreference;
+  final Color avatarColor;
+  final ValueChanged<AppThemePreference> onThemePreferenceChanged;
+  final ValueChanged<Color> onAvatarColorChanged;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -17,6 +31,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final UniHubRepository _repository = UniHubRepository.instance;
   late Future<UserProfile> _profileFuture;
   late Future<ProfileStats> _statsFuture;
+  late Future<Map<String, ProfileStats>> _semesterStatsFuture;
   bool _isLoggingOut = false;
   bool _isUpdatingProfile = false;
   bool _isUpdatingGroup = false;
@@ -26,26 +41,53 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.initState();
     _profileFuture = _repository.fetchProfile();
     _statsFuture = _repository.fetchProfileStats();
+    _semesterStatsFuture = _fetchSemesterStats();
   }
 
   Future<void> _reload() async {
+    final Future<UserProfile> profileFuture = _repository.fetchProfile();
+    final Future<ProfileStats> statsFuture = _repository.fetchProfileStats();
+    final Future<Map<String, ProfileStats>> semesterStatsFuture =
+        _fetchSemesterStats();
+
+    if (!mounted) {
+      return;
+    }
+
     setState(() {
-      _profileFuture = _repository.fetchProfile();
-      _statsFuture = _repository.fetchProfileStats();
+      _profileFuture = profileFuture;
+      _statsFuture = statsFuture;
+      _semesterStatsFuture = semesterStatsFuture;
     });
-    await Future.wait(<Future<dynamic>>[_profileFuture, _statsFuture]);
+    await Future.wait(<Future<dynamic>>[
+      profileFuture,
+      statsFuture,
+      semesterStatsFuture,
+    ]);
   }
 
-  int? _parseStudyYear(String value) {
-    final String trimmed = value.trim();
-    if (trimmed.isEmpty) {
-      return null;
-    }
-    final int? parsed = int.tryParse(trimmed);
-    if (parsed == null || parsed < 1 || parsed > 4) {
-      return null;
-    }
-    return parsed;
+  Future<Map<String, ProfileStats>> _fetchSemesterStats() async {
+    final List<Future<MapEntry<String, ProfileStats>>> futures =
+        UniHubRepository.availableSemesters
+            .map((String semesterLabel) async {
+              final ProfileStats stats = await _repository.fetchProfileStats(
+                semesterLabel: semesterLabel,
+              );
+              return MapEntry<String, ProfileStats>(semesterLabel, stats);
+            })
+            .toList(growable: false);
+
+    return Map<String, ProfileStats>.fromEntries(await Future.wait(futures));
+  }
+
+  void _showSnackBarAfterBuild(SnackBar snackBar) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(snackBar);
+    });
   }
 
   Future<void> _openEditProfileDialog(UserProfile profile) async {
@@ -53,122 +95,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return;
     }
 
-    final GlobalKey<FormState> formKey = GlobalKey<FormState>();
-    final TextEditingController nameController = TextEditingController(
-      text: profile.fullName,
-    );
-    final TextEditingController facultyController = TextEditingController(
-      text: profile.faculty,
-    );
-    final TextEditingController yearController = TextEditingController(
-      text: profile.studyYear?.toString() ?? '',
-    );
-    final TextEditingController emailController = TextEditingController(
-      text: profile.universityEmail,
-    );
-
     final _ProfileEditDraft? draft = await showDialog<_ProfileEditDraft>(
       context: context,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          title: const Text('Editeaza profilul'),
-          content: SingleChildScrollView(
-            child: SizedBox(
-              width: 420,
-              child: Form(
-                key: formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    TextFormField(
-                      controller: nameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Nume complet',
-                      ),
-                      validator: (String? value) {
-                        if ((value ?? '').trim().isEmpty) {
-                          return 'Numele este obligatoriu.';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    TextFormField(
-                      controller: facultyController,
-                      decoration: const InputDecoration(
-                        labelText: 'Facultate',
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    TextFormField(
-                      controller: yearController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'An de studiu (1-4)',
-                      ),
-                      validator: (String? value) {
-                        final String trimmed = (value ?? '').trim();
-                        if (trimmed.isEmpty) {
-                          return null;
-                        }
-                        final int? parsed = int.tryParse(trimmed);
-                        if (parsed == null || parsed < 1 || parsed > 4) {
-                          return 'Introdu un an valid (1-4).';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    TextFormField(
-                      controller: emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(
-                        labelText: 'Email universitar',
-                      ),
-                      validator: (String? value) {
-                        final String email = (value ?? '').trim();
-                        if (email.isEmpty || !email.contains('@')) {
-                          return 'Email invalid.';
-                        }
-                        return null;
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Renunta'),
-            ),
-            FilledButton(
-              onPressed: () {
-                if (!(formKey.currentState?.validate() ?? false)) {
-                  return;
-                }
-
-                Navigator.of(dialogContext).pop(
-                  _ProfileEditDraft(
-                    fullName: nameController.text,
-                    faculty: facultyController.text,
-                    studyYear: _parseStudyYear(yearController.text),
-                    universityEmail: emailController.text,
-                  ),
-                );
-              },
-              child: const Text('Salveaza'),
-            ),
-          ],
-        );
-      },
+      builder: (BuildContext dialogContext) =>
+          _ProfileEditDialog(profile: profile),
     );
-
-    nameController.dispose();
-    facultyController.dispose();
-    yearController.dispose();
-    emailController.dispose();
 
     if (!mounted || draft == null) {
       return;
@@ -185,20 +116,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
         studyYear: draft.studyYear,
         universityEmail: draft.universityEmail,
       );
-      await _reload();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        setState(() {
+          _profileFuture = _repository.fetchProfile();
+          _statsFuture = _repository.fetchProfileStats();
+          _semesterStatsFuture = _fetchSemesterStats();
+          _isUpdatingProfile = false;
+        });
+        _showSnackBarAfterBuild(
           const SnackBar(content: Text('Profilul a fost actualizat.')),
         );
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        _showSnackBarAfterBuild(
           const SnackBar(content: Text('Nu am putut salva profilul.')),
         );
       }
     } finally {
-      if (mounted) {
+      if (mounted && _isUpdatingProfile) {
         setState(() {
           _isUpdatingProfile = false;
         });
@@ -272,20 +208,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     try {
       await _repository.setCurrentGroupCode(newGroup);
-      await _reload();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        setState(() {
+          _profileFuture = _repository.fetchProfile();
+          _statsFuture = _repository.fetchProfileStats();
+          _semesterStatsFuture = _fetchSemesterStats();
+          _isUpdatingGroup = false;
+        });
+        _showSnackBarAfterBuild(
           SnackBar(content: Text('Grupa $newGroup a fost salvata.')),
         );
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        _showSnackBarAfterBuild(
           const SnackBar(content: Text('Nu am putut salva grupa.')),
         );
       }
     } finally {
-      if (mounted) {
+      if (mounted && _isUpdatingGroup) {
         setState(() {
           _isUpdatingGroup = false;
         });
@@ -313,6 +254,88 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
+  String _csvValue(Object? value) {
+    final String text = (value ?? '').toString();
+    if (!text.contains(',') && !text.contains('"') && !text.contains('\n')) {
+      return text;
+    }
+
+    return '"${text.replaceAll('"', '""')}"';
+  }
+
+  Future<void> _exportAcademicData() async {
+    try {
+      final List<Course> courses = await _repository.fetchUserCourses();
+      final Map<String, double> grades = await _repository
+          .fetchGradeTypeGrades();
+      final Map<String, double> weights = await _repository
+          .fetchGradeTypeWeights();
+
+      final List<String> lines = <String>[
+        'type,subject,semester,component,credits,weekday,time,room,professor,value',
+        ...courses.map(
+          (Course course) => <Object?>[
+            'course',
+            course.name,
+            course.semesterLabel,
+            course.courseType,
+            course.credits,
+            course.weekdayLabel,
+            course.time,
+            course.room,
+            course.professor,
+            '',
+          ].map(_csvValue).join(','),
+        ),
+        ...grades.entries.map((MapEntry<String, double> entry) {
+          final List<String> parts = entry.key.split('|');
+          return <Object?>[
+            'grade',
+            parts.isNotEmpty ? parts.first : '',
+            '',
+            parts.length > 1 ? parts.last : '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            entry.value.toStringAsFixed(0),
+          ].map(_csvValue).join(',');
+        }),
+        ...weights.entries.map((MapEntry<String, double> entry) {
+          final List<String> parts = entry.key.split('|');
+          return <Object?>[
+            'weight',
+            parts.isNotEmpty ? parts.first : '',
+            '',
+            parts.length > 1 ? parts.last : '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '${entry.value}%',
+          ].map(_csvValue).join(',');
+        }),
+      ];
+
+      await Clipboard.setData(ClipboardData(text: lines.join('\n')));
+      if (!mounted) {
+        return;
+      }
+      _showSnackBarAfterBuild(
+        const SnackBar(content: Text('Exportul CSV a fost copiat.')),
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      _showSnackBarAfterBuild(
+        const SnackBar(content: Text('Nu am putut exporta datele.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<UserProfile>(
@@ -328,24 +351,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
         return FutureBuilder<ProfileStats>(
           future: _statsFuture,
-          builder:
-              (BuildContext context, AsyncSnapshot<ProfileStats> stats) {
-                return ProfileScreenView(
-                  profile: snapshot.data!,
-                  stats: stats.data,
-                  isStatsLoading:
-                      stats.connectionState == ConnectionState.waiting,
-                  hasStatsError: stats.hasError,
-                  isLoggingOut: _isLoggingOut,
-                  isUpdatingProfile: _isUpdatingProfile,
-                  isUpdatingGroup: _isUpdatingGroup,
-                  onRefresh: _reload,
-                  onLogout: _logout,
-                  onEditProfile: () => _openEditProfileDialog(snapshot.data!),
-                  onChangeGroup: () =>
-                      _openChangeGroupDialog(snapshot.data!.groupCode),
-                );
-              },
+          builder: (BuildContext context, AsyncSnapshot<ProfileStats> stats) {
+            return FutureBuilder<Map<String, ProfileStats>>(
+              future: _semesterStatsFuture,
+              builder:
+                  (
+                    BuildContext context,
+                    AsyncSnapshot<Map<String, ProfileStats>> semesterStats,
+                  ) {
+                    return ProfileScreenView(
+                      profile: snapshot.data!,
+                      stats: stats.data,
+                      semesterStats: semesterStats.data ?? const {},
+                      isStatsLoading:
+                          stats.connectionState == ConnectionState.waiting,
+                      isSemesterStatsLoading:
+                          semesterStats.connectionState ==
+                          ConnectionState.waiting,
+                      hasStatsError: stats.hasError || semesterStats.hasError,
+                      isLoggingOut: _isLoggingOut,
+                      isUpdatingProfile: _isUpdatingProfile,
+                      isUpdatingGroup: _isUpdatingGroup,
+                      themePreference: widget.themePreference,
+                      avatarColor: widget.avatarColor,
+                      onRefresh: _reload,
+                      onLogout: _logout,
+                      onEditProfile: () =>
+                          _openEditProfileDialog(snapshot.data!),
+                      onChangeGroup: () =>
+                          _openChangeGroupDialog(snapshot.data!.groupCode),
+                      onThemePreferenceChanged: widget.onThemePreferenceChanged,
+                      onAvatarColorChanged: widget.onAvatarColorChanged,
+                      onExportAcademicData: _exportAcademicData,
+                    );
+                  },
+            );
+          },
         );
       },
     );
@@ -364,4 +405,146 @@ class _ProfileEditDraft {
   final String faculty;
   final int? studyYear;
   final String universityEmail;
+}
+
+class _ProfileEditDialog extends StatefulWidget {
+  const _ProfileEditDialog({required this.profile});
+
+  final UserProfile profile;
+
+  @override
+  State<_ProfileEditDialog> createState() => _ProfileEditDialogState();
+}
+
+class _ProfileEditDialogState extends State<_ProfileEditDialog> {
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  late final TextEditingController _nameController;
+  late final TextEditingController _facultyController;
+  late final TextEditingController _yearController;
+  late final TextEditingController _emailController;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.profile.fullName);
+    _facultyController = TextEditingController(text: widget.profile.faculty);
+    _yearController = TextEditingController(
+      text: widget.profile.studyYear?.toString() ?? '',
+    );
+    _emailController = TextEditingController(
+      text: widget.profile.universityEmail,
+    );
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _facultyController.dispose();
+    _yearController.dispose();
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  int? _parseStudyYear(String value) {
+    final String trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+    final int? parsed = int.tryParse(trimmed);
+    if (parsed == null || parsed < 1 || parsed > 4) {
+      return null;
+    }
+    return parsed;
+  }
+
+  void _save() {
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      return;
+    }
+
+    Navigator.of(context).pop(
+      _ProfileEditDraft(
+        fullName: _nameController.text,
+        faculty: _facultyController.text,
+        studyYear: _parseStudyYear(_yearController.text),
+        universityEmail: _emailController.text,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Editeaza profilul'),
+      content: SingleChildScrollView(
+        child: SizedBox(
+          width: 420,
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                TextFormField(
+                  controller: _nameController,
+                  decoration: const InputDecoration(labelText: 'Nume complet'),
+                  validator: (String? value) {
+                    if ((value ?? '').trim().isEmpty) {
+                      return 'Numele este obligatoriu.';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _facultyController,
+                  decoration: const InputDecoration(labelText: 'Facultate'),
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _yearController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'An de studiu (1-4)',
+                  ),
+                  validator: (String? value) {
+                    final String trimmed = (value ?? '').trim();
+                    if (trimmed.isEmpty) {
+                      return null;
+                    }
+                    final int? parsed = int.tryParse(trimmed);
+                    if (parsed == null || parsed < 1 || parsed > 4) {
+                      return 'Introdu un an valid (1-4).';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Email universitar',
+                  ),
+                  validator: (String? value) {
+                    final String email = (value ?? '').trim();
+                    if (email.isEmpty || !email.contains('@')) {
+                      return 'Email invalid.';
+                    }
+                    return null;
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Renunta'),
+        ),
+        FilledButton(onPressed: _save, child: const Text('Salveaza')),
+      ],
+    );
+  }
 }

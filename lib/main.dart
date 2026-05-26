@@ -4,7 +4,10 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:unihub/data/app_preferences_store.dart';
 import 'package:unihub/data/unihub_repository.dart';
+import 'package:unihub/models/user_profile.dart';
+import 'package:unihub/screens/functionality/academic_setup_screen.dart';
 import 'package:unihub/screens/functionality/calendar_screen.dart';
 import 'package:unihub/screens/functionality/grades_screen.dart';
 import 'package:unihub/screens/functionality/group_selection_screen.dart';
@@ -13,6 +16,7 @@ import 'package:unihub/screens/functionality/profile_screen.dart';
 import 'package:unihub/screens/functionality/resources_screen.dart';
 import 'package:unihub/screens/functionality/signup_screen.dart';
 import 'package:unihub/screens/ui/noise_overlay.dart';
+import 'package:unihub/services/notification_service.dart';
 import 'package:unihub/supabase/supabase_config.dart';
 import 'package:persistent_bottom_nav_bar/persistent_bottom_nav_bar.dart';
 
@@ -35,6 +39,7 @@ Future<void> _initializeSupabase() async {
       url: SupabaseConfig.url,
       anonKey: SupabaseConfig.anonKey,
     ).timeout(const Duration(seconds: 20));
+    await NotificationService.instance.initialize();
     _authLog('Supabase initialize succeeded.');
   } catch (e, stackTrace) {
     _authLog('Supabase initialize failed: $e');
@@ -126,36 +131,63 @@ class _SupabaseConfigErrorApp extends StatelessWidget {
   }
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
   @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  final AppPreferencesStore _preferences = AppPreferencesStore.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_preferences.load());
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'UniHub',
-      debugShowCheckedModeBanner: false,
-      locale: const Locale('ro'),
-      supportedLocales: const <Locale>[Locale('ro')],
-      localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF35B86F),
-          primary: const Color(0xFF35B86F),
-          secondary: const Color(0xFF88A892),
-          surface: const Color(0xFF1D211D),
-          brightness: Brightness.dark,
-        ),
-        scaffoldBackgroundColor: const Color(0xFF111411),
-        inputDecorationTheme: const InputDecorationTheme(
-          border: OutlineInputBorder(),
-        ),
+    return AnimatedBuilder(
+      animation: _preferences,
+      builder: (BuildContext context, Widget? child) {
+        return MaterialApp(
+          title: 'UniHub',
+          debugShowCheckedModeBanner: false,
+          locale: const Locale('ro'),
+          supportedLocales: const <Locale>[Locale('ro')],
+          localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          themeMode: _preferences.themeMode,
+          theme: _buildTheme(Brightness.light),
+          darkTheme: _buildTheme(Brightness.dark),
+          home: const AuthGateway(),
+        );
+      },
+    );
+  }
+
+  ThemeData _buildTheme(Brightness brightness) {
+    final bool isDark = brightness == Brightness.dark;
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: const Color(0xFF35B86F),
+        primary: const Color(0xFF35B86F),
+        secondary: const Color(0xFF88A892),
+        surface: isDark ? const Color(0xFF1D211D) : const Color(0xFFF6FAF6),
+        brightness: brightness,
       ),
-      home: const AuthGateway(),
+      scaffoldBackgroundColor: isDark
+          ? const Color(0xFF111411)
+          : const Color(0xFFF1F6F1),
+      inputDecorationTheme: const InputDecorationTheme(
+        border: OutlineInputBorder(),
+      ),
     );
   }
 }
@@ -172,6 +204,7 @@ class _AuthGatewayState extends State<AuthGateway> {
 
   bool _isInitialized = false;
   bool _isResolvingGroup = false;
+  bool _needsAcademicProfileSetup = false;
   String? _selectedGroupCode;
   Session? _session;
   StreamSubscription<AuthState>? _authSubscription;
@@ -214,16 +247,17 @@ class _AuthGatewayState extends State<AuthGateway> {
         _session = data.session;
         if (data.session == null) {
           _selectedGroupCode = null;
+          _needsAcademicProfileSetup = false;
         }
       });
 
       if (data.session != null) {
-        unawaited(_refreshSelectedGroupCode());
+        unawaited(_refreshOnboardingState());
       }
     });
 
     if (_session != null) {
-      await _refreshSelectedGroupCode();
+      await _refreshOnboardingState();
     }
 
     if (!mounted) {
@@ -236,13 +270,14 @@ class _AuthGatewayState extends State<AuthGateway> {
     _authLog('Auth initialization completed. _isInitialized=true');
   }
 
-  Future<void> _refreshSelectedGroupCode() async {
+  Future<void> _refreshOnboardingState() async {
     if (_supabase.auth.currentUser == null) {
       if (!mounted) {
         return;
       }
       setState(() {
         _selectedGroupCode = null;
+        _needsAcademicProfileSetup = false;
       });
       return;
     }
@@ -256,17 +291,24 @@ class _AuthGatewayState extends State<AuthGateway> {
     });
 
     try {
-      final String? groupCode = await UniHubRepository.instance
-          .fetchCurrentGroupCode();
+      final UniHubRepository repository = UniHubRepository.instance;
+      final results = await Future.wait<Object?>([
+        repository.fetchCurrentGroupCode(),
+        repository.fetchProfile(),
+      ]);
+      final String? groupCode = results[0] as String?;
+      final UserProfile profile = results[1] as UserProfile;
       if (!mounted) {
         return;
       }
       setState(() {
         _selectedGroupCode = groupCode;
+        _needsAcademicProfileSetup =
+            profile.faculty.trim().isEmpty || profile.studyYear == null;
       });
     } catch (e, stackTrace) {
-      _authLog('Group code fetch failed: $e');
-      _authLog('Group code fetch stack: $stackTrace');
+      _authLog('Onboarding state fetch failed: $e');
+      _authLog('Onboarding state fetch stack: $stackTrace');
       if (!mounted) {
         return;
       }
@@ -293,12 +335,39 @@ class _AuthGatewayState extends State<AuthGateway> {
           _selectedGroupCode = groupCode;
         });
       }
-      await _refreshSelectedGroupCode();
+      await _refreshOnboardingState();
       _authLog('Group selection completed successfully for group=$groupCode');
       return true;
     } catch (e, stackTrace) {
       _authLog('Group selection failed: $e');
       _authLog('Group selection stack: $stackTrace');
+      return false;
+    }
+  }
+
+  Future<bool> _saveAcademicProfileSetup({
+    required String faculty,
+    required int studyYear,
+  }) async {
+    _authLog(
+      'Academic profile setup started. userId=${_supabase.auth.currentUser?.id}',
+    );
+    try {
+      await UniHubRepository.instance.setAcademicProfileDetails(
+        faculty: faculty,
+        studyYear: studyYear,
+      );
+      if (mounted) {
+        setState(() {
+          _needsAcademicProfileSetup = false;
+        });
+      }
+      await _refreshOnboardingState();
+      _authLog('Academic profile setup completed successfully.');
+      return true;
+    } catch (e, stackTrace) {
+      _authLog('Academic profile setup failed: $e');
+      _authLog('Academic profile setup stack: $stackTrace');
       return false;
     }
   }
@@ -436,6 +505,12 @@ class _AuthGatewayState extends State<AuthGateway> {
         return const Scaffold(body: Center(child: CircularProgressIndicator()));
       }
 
+      if (_needsAcademicProfileSetup) {
+        return AcademicSetupScreen(
+          onSaveAcademicDetails: _saveAcademicProfileSetup,
+        );
+      }
+
       if (_selectedGroupCode == null) {
         return GroupSelectionScreen(onSaveGroup: _saveGroupSelection);
       }
@@ -457,28 +532,63 @@ class UniHubHomePage extends StatefulWidget {
 }
 
 class _UniHubHomePageState extends State<UniHubHomePage> {
+  final AppPreferencesStore _preferences = AppPreferencesStore.instance;
+  final UniHubRepository _repository = UniHubRepository.instance;
   late PersistentTabController _controller;
+  late int _coursesVersion;
 
   @override
   void initState() {
     super.initState();
+    _coursesVersion = _repository.coursesVersion.value;
     _controller = PersistentTabController(initialIndex: 0);
     _controller.addListener(() {
       setState(() {});
     });
+    _repository.coursesVersion.addListener(_handleCoursesChanged);
+    _preferences.addListener(_handlePreferencesChanged);
   }
 
   @override
   void dispose() {
+    _repository.coursesVersion.removeListener(_handleCoursesChanged);
+    _preferences.removeListener(_handlePreferencesChanged);
     _controller.dispose();
     super.dispose();
+  }
+
+  void _handleCoursesChanged() {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _coursesVersion = _repository.coursesVersion.value;
+    });
+  }
+
+  void _handlePreferencesChanged() {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {});
   }
 
   List<Widget> get _screens => <Widget>[
     const ResourcesScreen(),
     const CalendarScreen(),
-    const GradesScreen(),
-    ProfileScreen(onLogout: widget.onLogout),
+    GradesScreen(
+      coursesVersion: _coursesVersion,
+      isActive: _controller.index == 2,
+    ),
+    ProfileScreen(
+      onLogout: widget.onLogout,
+      themePreference: _preferences.themePreference,
+      avatarColor: _preferences.avatarColor,
+      onThemePreferenceChanged: _preferences.setThemePreference,
+      onAvatarColorChanged: _preferences.setAvatarColor,
+    ),
   ];
 
   List<PersistentBottomNavBarItem> _navBarsItems() {

@@ -1,24 +1,24 @@
 import 'package:flutter/material.dart';
 import 'dart:ui' as ui;
+import 'package:unihub/models/academic_progress.dart';
 
 class SubjectNoteCardData {
   const SubjectNoteCardData({
     required this.subjectName,
-    required this.gradesByType,
-    required this.weightsByType,
-    required this.average,
+    required this.evaluation,
   });
 
   final String subjectName;
-  final Map<String, double?> gradesByType;
-  final Map<String, double?> weightsByType;
-  final double? average;
+  final SubjectEvaluation evaluation;
 }
 
 class GradesScreenView extends StatefulWidget {
   const GradesScreenView({
     super.key,
     required this.subjectCards,
+    required this.totalCredits,
+    required this.earnedCredits,
+    required this.weightedAverage,
     required this.onRefresh,
     required this.allSubjectsValue,
     required this.selectedSubject,
@@ -31,6 +31,9 @@ class GradesScreenView extends StatefulWidget {
   });
 
   final List<SubjectNoteCardData> subjectCards;
+  final int totalCredits;
+  final int earnedCredits;
+  final double? weightedAverage;
   final Future<void> Function() onRefresh;
   final String allSubjectsValue;
   final String selectedSubject;
@@ -50,13 +53,15 @@ class _GradesScreenViewState extends State<GradesScreenView> {
   @override
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
+    final double bottomContentPadding =
+        MediaQuery.paddingOf(context).bottom + kBottomNavigationBarHeight + 72;
     return Stack(
       children: [
         // Main content
         RefreshIndicator(
           onRefresh: widget.onRefresh,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 60, 16, 24),
+            padding: EdgeInsets.fromLTRB(16, 60, 16, bottomContentPadding),
             children: <Widget>[
               // Modern summary card with glass morphism
               _buildSummaryCard(colors),
@@ -150,19 +155,33 @@ class _GradesScreenViewState extends State<GradesScreenView> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  '${widget.totalSubjectsCount}',
-                  style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: colors.primary,
-                    fontSize: 36,
-                  ),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: _SummaryMetric(
+                        label: 'Media UPT',
+                        value: widget.weightedAverage == null
+                            ? '-'
+                            : widget.weightedAverage!.toStringAsFixed(2),
+                        colors: colors,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _SummaryMetric(
+                        label: 'Credite',
+                        value: '${widget.earnedCredits}/${widget.totalCredits}',
+                        colors: colors,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
                 Text(
-                  'Materii sincronizate in timp real',
+                  'Nota minima de promovare este 5. Creditele se obtin integral doar pentru materiile promovate.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: colors.onSurfaceVariant,
+                    height: 1.3,
                   ),
                 ),
               ],
@@ -259,12 +278,6 @@ class _SubjectNoteCard extends StatefulWidget {
     required this.onResetTypeWeights,
   });
 
-  static const List<String> _courseTypes = <String>[
-    'Curs',
-    'Seminar',
-    'Laborator',
-  ];
-
   final SubjectNoteCardData card;
   final Future<void> Function(String subjectName, String courseType)
   onEditTypeGrade;
@@ -278,37 +291,54 @@ class _SubjectNoteCard extends StatefulWidget {
 class _SubjectNoteCardState extends State<_SubjectNoteCard> {
   bool _isHovered = false;
 
-  String _formatWeights(Map<String, double?> weightsByType) {
+  String _formatWeights(List<GradeComponent> components) {
     final List<String> parts = <String>[];
 
-    for (final String courseType in _SubjectNoteCard._courseTypes) {
-      final double? value = weightsByType[courseType];
-      if (value == null) {
+    for (final GradeComponent component in components) {
+      if (component.weight <= 0) {
         continue;
       }
 
+      final double value = component.weight * 100;
       final String formatted = (value % 1 == 0)
           ? value.toStringAsFixed(0)
           : value.toStringAsFixed(2);
-      parts.add('$courseType $formatted%');
+      parts.add('${component.name} $formatted%');
     }
 
     if (parts.isEmpty) {
-      return 'Ponderi: implicit (media aritmetica)';
+      return 'Ponderi: neconfigurate';
     }
 
-    return 'Ponderi: ${parts.join(' • ')}';
+    return 'Ponderi: ${parts.join(', ')}';
   }
 
-  bool _hasWeights(Map<String, double?> weightsByType) {
-    return weightsByType.values.any(
-      (double? value) => value != null && value > 0,
-    );
+  String? _statusReason(SubjectEvaluation evaluation) {
+    if (evaluation.failingComponents.isNotEmpty) {
+      final String names = evaluation.failingComponents
+          .map((GradeComponent component) => component.name)
+          .join(', ');
+      return 'Materia nu este promovata deoarece componenta $names este sub 5.';
+    }
+
+    if (evaluation.missingRequiredComponents.isNotEmpty) {
+      final String names = evaluation.missingRequiredComponents
+          .map((GradeComponent component) => component.name)
+          .join(', ');
+      return 'Materia este incompleta: lipseste nota la $names.';
+    }
+
+    return evaluation.configurationMessage;
   }
 
   @override
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
+    final SubjectEvaluation evaluation = widget.card.evaluation;
+    final AcademicSubject subject = evaluation.subject;
+    final double? shownGrade =
+        evaluation.finalGrade ?? evaluation.estimatedFinalGrade;
+    final String? statusReason = _statusReason(evaluation);
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -346,54 +376,42 @@ class _SubjectNoteCardState extends State<_SubjectNoteCard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
+                  Text(
+                    widget.card.subjectName,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 18,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          widget.card.subjectName,
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 18,
-                              ),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              colors.primary.withOpacity(0.35),
-                              colors.secondary.withOpacity(0.25),
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          widget.card.average == null
-                              ? '-'
-                              : widget.card.average!.toStringAsFixed(2),
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(
-                                fontWeight: FontWeight.w800,
-                                color: colors.primary,
-                              ),
+                    children: <Widget>[
+                      _StatusChip(card: widget.card),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${evaluation.earnedCredits}/${subject.credits} credite',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    _formatWeights(widget.card.weightsByType),
+                    _formatWeights(subject.components),
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: colors.onSurfaceVariant,
                       fontStyle: FontStyle.italic,
                     ),
                   ),
+                  if (statusReason != null) ...<Widget>[
+                    const SizedBox(height: 10),
+                    _StatusReasonBox(
+                      message: statusReason,
+                      status: evaluation.status,
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   // Action buttons
                   Row(
@@ -428,13 +446,12 @@ class _SubjectNoteCardState extends State<_SubjectNoteCard> {
                   ),
                   const SizedBox(height: 10),
                   // Course types
-                  ..._SubjectNoteCard._courseTypes.map(
-                    (String courseType) => Padding(
+                  ...subject.components.map(
+                    (GradeComponent component) => Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: _TypeGradeTile(
                         subjectName: widget.card.subjectName,
-                        courseType: courseType,
-                        grade: widget.card.gradesByType[courseType],
+                        component: component,
                         onEditTypeGrade: widget.onEditTypeGrade,
                       ),
                     ),
@@ -454,13 +471,22 @@ class _SubjectNoteCardState extends State<_SubjectNoteCard> {
                   ),
                   const SizedBox(height: 10),
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: <Widget>[
+                      Expanded(
+                        child: Text(
+                          'Media materiei',
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                      ),
                       Text(
-                        _hasWeights(widget.card.weightsByType)
-                            ? 'Media ponderata'
-                            : 'Media aritmetica',
+                        shownGrade == null
+                            ? '-'
+                            : shownGrade.toStringAsFixed(2),
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
+                          color: colors.primary,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                     ],
@@ -478,14 +504,12 @@ class _SubjectNoteCardState extends State<_SubjectNoteCard> {
 class _TypeGradeTile extends StatelessWidget {
   const _TypeGradeTile({
     required this.subjectName,
-    required this.courseType,
-    required this.grade,
+    required this.component,
     required this.onEditTypeGrade,
   });
 
   final String subjectName;
-  final String courseType;
-  final double? grade;
+  final GradeComponent component;
   final Future<void> Function(String subjectName, String courseType)
   onEditTypeGrade;
 
@@ -495,7 +519,7 @@ class _TypeGradeTile extends StatelessWidget {
 
     return InkWell(
       borderRadius: BorderRadius.circular(12),
-      onTap: () => onEditTypeGrade(subjectName, courseType),
+      onTap: () => onEditTypeGrade(subjectName, component.name),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
@@ -522,7 +546,7 @@ class _TypeGradeTile extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                courseType,
+                component.name,
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
                   fontWeight: FontWeight.w600,
                   color: colors.secondary,
@@ -532,14 +556,134 @@ class _TypeGradeTile extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                grade == null
+                component.grade == null
                     ? 'Adauga nota'
-                    : 'Nota: ${grade!.toStringAsFixed(2)}',
+                    : 'Nota: ${component.grade!.toStringAsFixed(0)}',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
             ),
             Icon(Icons.edit_rounded, size: 18, color: colors.primary),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SummaryMetric extends StatelessWidget {
+  const _SummaryMetric({
+    required this.label,
+    required this.value,
+    required this.colors,
+  });
+
+  final String label;
+  final String value;
+  final ColorScheme colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colors.surface.withOpacity(0.32),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colors.primary.withOpacity(0.16)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: colors.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              color: colors.primary,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({required this.card});
+
+  final SubjectNoteCardData card;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final SubjectStatus status = card.evaluation.status;
+    final Color color = switch (status) {
+      SubjectStatus.promoted => colors.primary,
+      SubjectStatus.failed => colors.error,
+      SubjectStatus.incomplete => Colors.orange,
+      SubjectStatus.notStarted => colors.onSurfaceVariant,
+    };
+    final String label = switch (status) {
+      SubjectStatus.promoted => 'Promovata',
+      SubjectStatus.failed => 'Restanta',
+      SubjectStatus.incomplete => 'Incompleta',
+      SubjectStatus.notStarted => 'Neinceputa',
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.16),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: color,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusReasonBox extends StatelessWidget {
+  const _StatusReasonBox({required this.message, required this.status});
+
+  final String message;
+  final SubjectStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final Color color = switch (status) {
+      SubjectStatus.promoted => colors.primary,
+      SubjectStatus.failed => colors.error,
+      SubjectStatus.incomplete => Colors.orange,
+      SubjectStatus.notStarted => colors.onSurfaceVariant,
+    };
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.24)),
+      ),
+      child: Text(
+        message,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: color,
+          fontWeight: FontWeight.w600,
+          height: 1.3,
         ),
       ),
     );

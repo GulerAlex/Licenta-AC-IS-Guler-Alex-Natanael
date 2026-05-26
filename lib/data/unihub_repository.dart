@@ -1,12 +1,17 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:unihub/models/academic_progress.dart';
 import 'package:unihub/models/course.dart';
+import 'package:unihub/models/exam_event.dart';
 import 'package:unihub/models/profile_stats.dart';
 import 'package:unihub/models/user_profile.dart';
+import 'package:unihub/services/academic_progress_calculator.dart';
 
 class UniHubRepository {
   UniHubRepository._();
 
   static final UniHubRepository instance = UniHubRepository._();
+  final ValueNotifier<int> coursesVersion = ValueNotifier<int>(0);
   static const String pendingCourseTimeLabel = '__PENDING__';
   static const List<String> availableGroups = <String>[
     '1.1',
@@ -22,6 +27,10 @@ class UniHubRepository {
   ];
 
   SupabaseClient get _client => Supabase.instance.client;
+
+  void _notifyCoursesChanged() {
+    coursesVersion.value += 1;
+  }
 
   Future<List<Course>> fetchCourses({required String semesterLabel}) async {
     if (!availableSemesters.contains(semesterLabel)) {
@@ -92,6 +101,7 @@ class UniHubRepository {
       'professor': course.professor,
       'sort_order': course.sortOrder,
     });
+    _notifyCoursesChanged();
   }
 
   Future<void> addCourseSubject({
@@ -137,6 +147,7 @@ class UniHubRepository {
       'professor': '-',
       'sort_order': 9999,
     });
+    _notifyCoursesChanged();
   }
 
   Future<void> clearPendingCourseDraft({
@@ -155,6 +166,7 @@ class UniHubRepository {
         .eq('semester_label', semesterLabel)
         .eq('name', subjectName)
         .eq('time_label', pendingCourseTimeLabel);
+    _notifyCoursesChanged();
   }
 
   Future<int> deleteSubjectCourses({
@@ -174,6 +186,9 @@ class UniHubRepository {
         .eq('name', subjectName)
         .select('id');
 
+    if (deletedRows.isNotEmpty) {
+      _notifyCoursesChanged();
+    }
     return deletedRows.length;
   }
 
@@ -194,6 +209,9 @@ class UniHubRepository {
         .eq('room', course.room)
         .select('id');
 
+    if (deletedRows.isNotEmpty) {
+      _notifyCoursesChanged();
+    }
     return deletedRows.length;
   }
 
@@ -225,6 +243,9 @@ class UniHubRepository {
         .eq('room', originalCourse.room)
         .select('id');
 
+    if (updatedRows.isNotEmpty) {
+      _notifyCoursesChanged();
+    }
     return updatedRows.length;
   }
 
@@ -235,6 +256,7 @@ class UniHubRepository {
     }
 
     await _client.from('courses').delete().eq('user_id', user.id);
+    _notifyCoursesChanged();
   }
 
   Future<void> replaceUserCourses(List<Course> courses) async {
@@ -246,6 +268,7 @@ class UniHubRepository {
     await _client.from('courses').delete().eq('user_id', user.id);
 
     if (courses.isEmpty) {
+      _notifyCoursesChanged();
       return;
     }
 
@@ -267,6 +290,7 @@ class UniHubRepository {
         .toList(growable: false);
 
     await _client.from('courses').insert(payload);
+    _notifyCoursesChanged();
   }
 
   Future<Map<String, double>> fetchGradeTypeWeights() async {
@@ -375,20 +399,15 @@ class UniHubRepository {
       return;
     }
 
-    await _client.from('grade_type_grades').upsert(
-      <String, dynamic>{
-        'user_id': user.id,
-        'subject_name': normalizedSubject,
-        'course_type': normalizedType,
-        'score': score,
-      },
-      onConflict: 'user_id,subject_name,course_type',
-    );
+    await _client.from('grade_type_grades').upsert(<String, dynamic>{
+      'user_id': user.id,
+      'subject_name': normalizedSubject,
+      'course_type': normalizedType,
+      'score': score,
+    }, onConflict: 'user_id,subject_name,course_type');
   }
 
-  Future<void> upsertGradeTypeGrades(
-    List<Map<String, dynamic>> items,
-  ) async {
+  Future<void> upsertGradeTypeGrades(List<Map<String, dynamic>> items) async {
     final User? user = _client.auth.currentUser;
     if (user == null) {
       throw StateError('No authenticated user');
@@ -400,7 +419,8 @@ class UniHubRepository {
 
     final List<Map<String, dynamic>> payload = <Map<String, dynamic>>[];
     for (final Map<String, dynamic> item in items) {
-      final String subjectName = (item['subject_name'] as String?)?.trim() ?? '';
+      final String subjectName =
+          (item['subject_name'] as String?)?.trim() ?? '';
       final String courseType = (item['course_type'] as String?)?.trim() ?? '';
       final double? score = switch (item['score']) {
         num value => value.toDouble(),
@@ -428,10 +448,9 @@ class UniHubRepository {
       return;
     }
 
-    await _client.from('grade_type_grades').upsert(
-      payload,
-      onConflict: 'user_id,subject_name,course_type',
-    );
+    await _client
+        .from('grade_type_grades')
+        .upsert(payload, onConflict: 'user_id,subject_name,course_type');
   }
 
   Future<void> setGradeTypeWeights({
@@ -502,8 +521,8 @@ class UniHubRepository {
       final String dateKey = switch (dateRaw) {
         DateTime value =>
           '${value.year.toString().padLeft(4, '0')}'
-          '-${value.month.toString().padLeft(2, '0')}'
-          '-${value.day.toString().padLeft(2, '0')}',
+              '-${value.month.toString().padLeft(2, '0')}'
+              '-${value.day.toString().padLeft(2, '0')}',
         String value => value.trim(),
         _ => '',
       };
@@ -543,14 +562,11 @@ class UniHubRepository {
       return;
     }
 
-    await _client.from('resource_notes').upsert(
-      <String, dynamic>{
-        'user_id': user.id,
-        'note_date': normalizedDate,
-        'note_text': normalizedNote,
-      },
-      onConflict: 'user_id,note_date',
-    );
+    await _client.from('resource_notes').upsert(<String, dynamic>{
+      'user_id': user.id,
+      'note_date': normalizedDate,
+      'note_text': normalizedNote,
+    }, onConflict: 'user_id,note_date');
   }
 
   Future<void> deleteResourceNote({required String dateKey}) async {
@@ -600,10 +616,104 @@ class UniHubRepository {
       return;
     }
 
-    await _client.from('resource_notes').upsert(
-      payload,
-      onConflict: 'user_id,note_date',
-    );
+    await _client
+        .from('resource_notes')
+        .upsert(payload, onConflict: 'user_id,note_date');
+  }
+
+  Future<List<ExamEvent>> fetchExamEvents() async {
+    final User? user = _client.auth.currentUser;
+    if (user == null) {
+      throw StateError('No authenticated user');
+    }
+
+    final List<dynamic> rows = await _client
+        .from('exam_events')
+        .select(
+          'id, subject_name, exam_type, starts_at, room, notes, reminder_minutes_before, notifications_enabled',
+        )
+        .eq('user_id', user.id)
+        .order('starts_at', ascending: true);
+
+    return rows
+        .whereType<Map<String, dynamic>>()
+        .map(ExamEvent.fromMap)
+        .toList(growable: false);
+  }
+
+  Future<ExamEvent> addExamEvent(ExamEvent event) async {
+    final User? user = _client.auth.currentUser;
+    if (user == null) {
+      throw StateError('No authenticated user');
+    }
+
+    _validateExamEvent(event);
+
+    final List<dynamic> rows = await _client
+        .from('exam_events')
+        .insert(event.toSupabasePayload(userId: user.id))
+        .select(
+          'id, subject_name, exam_type, starts_at, room, notes, reminder_minutes_before, notifications_enabled',
+        );
+
+    return ExamEvent.fromMap(rows.first as Map<String, dynamic>);
+  }
+
+  Future<ExamEvent> updateExamEvent(ExamEvent event) async {
+    final User? user = _client.auth.currentUser;
+    if (user == null) {
+      throw StateError('No authenticated user');
+    }
+
+    if (event.id.trim().isEmpty) {
+      throw ArgumentError('Exam id is required.');
+    }
+    _validateExamEvent(event);
+
+    final List<dynamic> rows = await _client
+        .from('exam_events')
+        .update(event.toSupabasePayload(userId: user.id))
+        .eq('user_id', user.id)
+        .eq('id', event.id)
+        .select(
+          'id, subject_name, exam_type, starts_at, room, notes, reminder_minutes_before, notifications_enabled',
+        );
+
+    if (rows.isEmpty) {
+      throw StateError('Exam event not found.');
+    }
+
+    return ExamEvent.fromMap(rows.first as Map<String, dynamic>);
+  }
+
+  Future<void> deleteExamEvent(String examEventId) async {
+    final User? user = _client.auth.currentUser;
+    if (user == null) {
+      throw StateError('No authenticated user');
+    }
+
+    final String normalizedId = examEventId.trim();
+    if (normalizedId.isEmpty) {
+      throw ArgumentError('examEventId is required.');
+    }
+
+    await _client
+        .from('exam_events')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('id', normalizedId);
+  }
+
+  void _validateExamEvent(ExamEvent event) {
+    if (event.subjectName.trim().isEmpty) {
+      throw ArgumentError('Subject name is required.');
+    }
+    if (event.examType.trim().isEmpty) {
+      throw ArgumentError('Exam type is required.');
+    }
+    if (event.reminderMinutesBefore < 0) {
+      throw ArgumentError('Reminder cannot be negative.');
+    }
   }
 
   Future<String?> fetchCurrentGroupCode() async {
@@ -639,6 +749,30 @@ class UniHubRepository {
         .from('profiles')
         .update(<String, dynamic>{'group_code': groupCode})
         .eq('id', user.id);
+  }
+
+  Future<void> setAcademicProfileDetails({
+    required String faculty,
+    required int studyYear,
+  }) async {
+    final User? user = _client.auth.currentUser;
+    if (user == null) {
+      throw StateError('No authenticated user');
+    }
+
+    final String normalizedFaculty = faculty.trim();
+    if (normalizedFaculty.isEmpty) {
+      throw ArgumentError('faculty is required.');
+    }
+    if (studyYear < 1 || studyYear > 4) {
+      throw ArgumentError('studyYear must be between 1 and 4.');
+    }
+
+    await _client.from('profiles').upsert(<String, dynamic>{
+      'id': user.id,
+      'faculty': normalizedFaculty,
+      'study_year': studyYear,
+    }, onConflict: 'id');
   }
 
   Future<UserProfile> fetchProfile() async {
@@ -685,8 +819,9 @@ class UniHubRepository {
       throw ArgumentError('universityEmail is invalid.');
     }
 
-    final int? normalizedStudyYear =
-        (studyYear != null && studyYear > 0) ? studyYear : null;
+    final int? normalizedStudyYear = (studyYear != null && studyYear > 0)
+        ? studyYear
+        : null;
 
     await _client
         .from('profiles')
@@ -699,7 +834,7 @@ class UniHubRepository {
         .eq('id', user.id);
   }
 
-  Future<ProfileStats> fetchProfileStats() async {
+  Future<ProfileStats> fetchProfileStats({String? semesterLabel}) async {
     final User? user = _client.auth.currentUser;
     if (user == null) {
       throw StateError('No authenticated user');
@@ -707,10 +842,16 @@ class UniHubRepository {
 
     final List<dynamic> courseRows = await _client
         .from('courses')
-        .select('name, credits')
+        .select('name, semester_label, credits, course_type')
         .eq('user_id', user.id);
+    final List<dynamic> gradeRows = await _client
+        .from('grade_type_grades')
+        .select('subject_name, course_type, score')
+        .eq('user_id', user.id);
+    final Map<String, double> weights = await fetchGradeTypeWeights();
 
-    final Map<String, int> creditsBySubject = <String, int>{};
+    final Map<String, List<Map<String, dynamic>>> courseRowsBySubject =
+        <String, List<Map<String, dynamic>>>{};
     for (final dynamic row in courseRows) {
       if (row is! Map<String, dynamic>) {
         continue;
@@ -719,47 +860,33 @@ class UniHubRepository {
       if (subjectName.isEmpty) {
         continue;
       }
-
-      final dynamic creditsRaw = row['credits'];
-      final int parsedCredits = switch (creditsRaw) {
-        int value => value,
-        num value => value.toInt(),
-        String value => int.tryParse(value) ?? 0,
-        _ => 0,
-      };
-      final int normalizedCredits = parsedCredits < 0 ? 0 : parsedCredits;
-      final int existing = creditsBySubject[subjectName] ?? 0;
-      if (normalizedCredits > existing) {
-        creditsBySubject[subjectName] = normalizedCredits;
+      if (semesterLabel != null &&
+          ((row['semester_label'] as String?)?.trim() ?? '') != semesterLabel) {
+        continue;
       }
+      courseRowsBySubject
+          .putIfAbsent(subjectName, () => <Map<String, dynamic>>[])
+          .add(row);
     }
 
-    final int totalSubjects = creditsBySubject.length;
-    final int totalCredits = creditsBySubject.values.fold<int>(
-      0,
-      (int acc, int value) => acc + value,
-    );
-
-    final List<dynamic> gradeRows = await _client
-        .from('grade_type_grades')
-        .select('subject_name, score')
-        .eq('user_id', user.id);
-
-    final Set<String> knownSubjects = creditsBySubject.keys.toSet();
-    final Map<String, List<double>> gradesBySubject =
-        <String, List<double>>{};
-
+    final Map<String, Map<String, double>> gradesBySubject =
+        <String, Map<String, double>>{};
     for (final dynamic row in gradeRows) {
       if (row is! Map<String, dynamic>) {
         continue;
       }
 
-      final String subjectName =
-          (row['subject_name'] as String?)?.trim() ?? '';
+      final String subjectName = (row['subject_name'] as String?)?.trim() ?? '';
       if (subjectName.isEmpty) {
         continue;
       }
-      if (knownSubjects.isNotEmpty && !knownSubjects.contains(subjectName)) {
+      if (courseRowsBySubject.isNotEmpty &&
+          !courseRowsBySubject.containsKey(subjectName)) {
+        continue;
+      }
+
+      final String courseType = (row['course_type'] as String?)?.trim() ?? '';
+      if (courseType.isEmpty) {
         continue;
       }
 
@@ -774,30 +901,191 @@ class UniHubRepository {
         continue;
       }
 
-      gradesBySubject.putIfAbsent(subjectName, () => <double>[]).add(score);
+      gradesBySubject.putIfAbsent(
+        subjectName,
+        () => <String, double>{},
+      )[courseType] = score;
     }
 
-    double? overallAverage;
-    if (gradesBySubject.isNotEmpty) {
-      double sum = 0;
-      int count = 0;
-      for (final List<double> values in gradesBySubject.values) {
-        if (values.isEmpty) {
-          continue;
-        }
-        final double subjectAverage =
-            values.fold<double>(0, (double acc, double v) => acc + v) /
-                values.length;
-        sum += subjectAverage;
-        count += 1;
-      }
-      overallAverage = count == 0 ? null : sum / count;
-    }
+    final List<AcademicSubject> subjects = courseRowsBySubject.entries
+        .map((MapEntry<String, List<Map<String, dynamic>>> entry) {
+          final String subjectName = entry.key;
+          final List<Map<String, dynamic>> rows = entry.value;
+          final int credits = rows.fold<int>(0, (
+            int currentMax,
+            Map<String, dynamic> row,
+          ) {
+            final dynamic creditsRaw = row['credits'];
+            final int parsedCredits = switch (creditsRaw) {
+              int value => value,
+              num value => value.toInt(),
+              String value => int.tryParse(value) ?? 0,
+              _ => 0,
+            };
+            return parsedCredits > currentMax ? parsedCredits : currentMax;
+          });
+          final String semester =
+              (rows.first['semester_label'] as String?)?.trim() ?? '';
+          final Set<String> componentNames = <String>{
+            ...rows
+                .map(
+                  (Map<String, dynamic> row) => _canonicalComponentName(
+                    (row['course_type'] as String?) ?? '',
+                  ),
+                )
+                .where((String value) => value.isNotEmpty),
+            ...(gradesBySubject[subjectName] ?? <String, double>{}).keys.map(
+              _canonicalComponentName,
+            ),
+            ...weights.keys
+                .where((String key) => key.startsWith('$subjectName|'))
+                .map(
+                  (String key) => _canonicalComponentName(key.split('|').last),
+                ),
+          };
+          if (componentNames.isEmpty) {
+            componentNames.add('Examen');
+          }
+          final bool hasConfiguredWeights = componentNames.any(
+            (String componentName) =>
+                (_weightForComponent(
+                      weights: weights,
+                      subjectName: subjectName,
+                      componentName: componentName,
+                    ) ??
+                    0) >
+                0,
+          );
+          final double defaultWeight = componentNames.isEmpty
+              ? 0
+              : 1 / componentNames.length;
+          final Map<String, double> grades =
+              gradesBySubject[subjectName] ?? <String, double>{};
+
+          return AcademicSubject(
+            id: subjectName,
+            name: subjectName,
+            semester: semester,
+            year: 0,
+            credits: credits,
+            components: componentNames
+                .map((String componentName) {
+                  return GradeComponent(
+                    id: '$subjectName|$componentName',
+                    name: componentName,
+                    type: _componentTypeFromLabel(componentName),
+                    grade: _gradeForComponent(
+                      grades: grades,
+                      componentName: componentName,
+                    ),
+                    weight: hasConfiguredWeights
+                        ? ((_weightForComponent(
+                                    weights: weights,
+                                    subjectName: subjectName,
+                                    componentName: componentName,
+                                  ) ??
+                                  0) /
+                              100)
+                        : defaultWeight,
+                    isRequired: true,
+                    isEliminatory: _isEliminatoryComponent(componentName),
+                  );
+                })
+                .toList(growable: false),
+          );
+        })
+        .toList(growable: false);
+    final AcademicProgress progress =
+        AcademicProgressCalculator.calculateAcademicProgress(subjects);
+    final int promotedSubjects = progress.subjects
+        .where((SubjectEvaluation evaluation) => evaluation.isPromoted)
+        .length;
+    final int failedSubjects = progress.subjects
+        .where(
+          (SubjectEvaluation evaluation) =>
+              evaluation.status == SubjectStatus.failed,
+        )
+        .length;
+    final int incompleteSubjects = progress.subjects
+        .where(
+          (SubjectEvaluation evaluation) =>
+              evaluation.status == SubjectStatus.incomplete,
+        )
+        .length;
+    final int notStartedSubjects = progress.subjects
+        .where(
+          (SubjectEvaluation evaluation) =>
+              evaluation.status == SubjectStatus.notStarted,
+        )
+        .length;
 
     return ProfileStats(
-      totalSubjects: totalSubjects,
-      totalCredits: totalCredits,
-      overallAverage: overallAverage,
+      totalSubjects: subjects.length,
+      promotedSubjects: promotedSubjects,
+      failedSubjects: failedSubjects,
+      incompleteSubjects: incompleteSubjects,
+      notStartedSubjects: notStartedSubjects,
+      totalCredits: progress.totalPossibleCredits,
+      earnedCredits: progress.totalEarnedCredits,
+      failedCredits: progress.failedCredits,
+      incompleteCredits: progress.incompleteCredits,
+      remainingCredits: progress.remainingCredits,
+      standingLabel: _standingLabel(progress.standing),
+      overallAverage: progress.officialAverage,
+      estimatedAverage: progress.estimatedAverage,
     );
+  }
+
+  GradeComponentType _componentTypeFromLabel(String label) {
+    return switch (label.trim().toLowerCase()) {
+      'curs' || 'examen' => GradeComponentType.exam,
+      'seminar' => GradeComponentType.seminar,
+      'laborator' => GradeComponentType.laboratory,
+      'proiect' => GradeComponentType.project,
+      'activitate pe parcurs' => GradeComponentType.coursework,
+      _ => GradeComponentType.other,
+    };
+  }
+
+  String _canonicalComponentName(String label) {
+    return switch (label.trim()) {
+      'Curs' => 'Examen',
+      String value when value.isNotEmpty => value,
+      _ => 'Alta componenta',
+    };
+  }
+
+  bool _isEliminatoryComponent(String label) {
+    return switch (_componentTypeFromLabel(label)) {
+      GradeComponentType.seminar ||
+      GradeComponentType.laboratory ||
+      GradeComponentType.project => true,
+      _ => false,
+    };
+  }
+
+  double? _gradeForComponent({
+    required Map<String, double> grades,
+    required String componentName,
+  }) {
+    return grades[componentName] ??
+        (componentName == 'Examen' ? grades['Curs'] : null);
+  }
+
+  double? _weightForComponent({
+    required Map<String, double> weights,
+    required String subjectName,
+    required String componentName,
+  }) {
+    return weights['$subjectName|$componentName'] ??
+        (componentName == 'Examen' ? weights['$subjectName|Curs'] : null);
+  }
+
+  String _standingLabel(AcademicStanding standing) {
+    return switch (standing) {
+      AcademicStanding.integralist => 'Integralist',
+      AcademicStanding.restantier => 'Restantier',
+      AcademicStanding.incomplet => 'Incomplet',
+    };
   }
 }

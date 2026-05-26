@@ -4,12 +4,21 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:unihub/models/academic_progress.dart';
 import 'package:unihub/data/unihub_repository.dart';
 import 'package:unihub/models/course.dart';
+import 'package:unihub/services/academic_progress_calculator.dart';
 import 'package:unihub/screens/ui/grades_screen_view.dart';
 
 class GradesScreen extends StatefulWidget {
-  const GradesScreen({super.key});
+  const GradesScreen({
+    super.key,
+    required this.coursesVersion,
+    required this.isActive,
+  });
+
+  final int coursesVersion;
+  final bool isActive;
 
   @override
   State<GradesScreen> createState() => _GradesScreenState();
@@ -19,7 +28,15 @@ class _GradesScreenState extends State<GradesScreen> {
   final UniHubRepository _repository = UniHubRepository.instance;
   static const String _allSubjectsValue = '__all__';
   static const List<String> _courseTypeOptions = <String>[
-    'Curs',
+    'Examen',
+    'Seminar',
+    'Laborator',
+    'Proiect',
+    'Activitate pe parcurs',
+    'Alta componenta',
+  ];
+  static const List<String> _weightTypeOptions = <String>[
+    'Examen',
     'Seminar',
     'Laborator',
   ];
@@ -39,8 +56,18 @@ class _GradesScreenState extends State<GradesScreen> {
     _subscribeToCoursesRealtime();
     _subscribeToGradesRealtime();
     _subscribeToWeightsRealtime();
+    _repository.coursesVersion.addListener(_handleCoursesChanged);
     unawaited(_initializeGradesData());
     unawaited(_loadTypeWeights());
+  }
+
+  @override
+  void didUpdateWidget(covariant GradesScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.coursesVersion != widget.coursesVersion ||
+        (!oldWidget.isActive && widget.isActive)) {
+      _refreshCourses();
+    }
   }
 
   @override
@@ -57,7 +84,21 @@ class _GradesScreenState extends State<GradesScreen> {
     if (weightsChannel != null) {
       Supabase.instance.client.removeChannel(weightsChannel);
     }
+    _repository.coursesVersion.removeListener(_handleCoursesChanged);
     super.dispose();
+  }
+
+  void _handleCoursesChanged() {
+    _refreshCourses();
+  }
+
+  void _refreshCourses() {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _coursesFuture = _repository.fetchUserCourses();
+    });
   }
 
   void _subscribeToCoursesRealtime() {
@@ -166,6 +207,70 @@ class _GradesScreenState extends State<GradesScreen> {
     return '${subjectName.trim()}|${courseType.trim()}';
   }
 
+  GradeComponentType _componentTypeFromLabel(String label) {
+    return switch (label.trim().toLowerCase()) {
+      'curs' || 'examen' => GradeComponentType.exam,
+      'seminar' => GradeComponentType.seminar,
+      'laborator' => GradeComponentType.laboratory,
+      'proiect' => GradeComponentType.project,
+      'activitate pe parcurs' => GradeComponentType.coursework,
+      _ => GradeComponentType.other,
+    };
+  }
+
+  String _canonicalComponentName(String label) {
+    return switch (label.trim().toLowerCase()) {
+      'curs' || 'examen' => 'Examen',
+      'seminar' => 'Seminar',
+      'laborator' => 'Laborator',
+      'proiect' => 'Proiect',
+      'activitate pe parcurs' => 'Activitate pe parcurs',
+      String value when value.isNotEmpty => label.trim(),
+      _ => 'Alta componenta',
+    };
+  }
+
+  bool _isEliminatoryComponent(String label) {
+    return switch (_componentTypeFromLabel(label)) {
+      GradeComponentType.seminar ||
+      GradeComponentType.laboratory ||
+      GradeComponentType.project => true,
+      _ => false,
+    };
+  }
+
+  double? _gradeForComponent({
+    required String subjectName,
+    required String componentName,
+  }) {
+    return _typeGrades[_gradeKey(
+          subjectName: subjectName,
+          courseType: componentName,
+        )] ??
+        (componentName == 'Examen'
+            ? _typeGrades[_gradeKey(
+                subjectName: subjectName,
+                courseType: 'Curs',
+              )]
+            : null);
+  }
+
+  double? _weightForComponent({
+    required String subjectName,
+    required String componentName,
+  }) {
+    return _typeWeights[_weightKey(
+          subjectName: subjectName,
+          courseType: componentName,
+        )] ??
+        (componentName == 'Examen'
+            ? _typeWeights[_weightKey(
+                subjectName: subjectName,
+                courseType: 'Curs',
+              )]
+            : null);
+  }
+
   Future<void> _initializeGradesData() async {
     await _migrateLocalGradesIfNeeded();
     await _loadTypeGrades();
@@ -232,8 +337,8 @@ class _GradesScreenState extends State<GradesScreen> {
 
   Future<void> _loadTypeGrades() async {
     try {
-      final Map<String, double> grades =
-          await _repository.fetchGradeTypeGrades();
+      final Map<String, double> grades = await _repository
+          .fetchGradeTypeGrades();
       if (!mounted) {
         return;
       }
@@ -247,8 +352,8 @@ class _GradesScreenState extends State<GradesScreen> {
 
   Future<void> _loadTypeWeights() async {
     try {
-      final Map<String, double> weights =
-          await _repository.fetchGradeTypeWeights();
+      final Map<String, double> weights = await _repository
+          .fetchGradeTypeWeights();
       if (!mounted) {
         return;
       }
@@ -313,9 +418,11 @@ class _GradesScreenState extends State<GradesScreen> {
           (String key, double _) => key.startsWith('${subjectName.trim()}|'),
         );
         for (final MapEntry<String, double> entry in weightsByType.entries) {
-          _typeWeights[
-            _weightKey(subjectName: subjectName, courseType: entry.key)
-          ] = entry.value;
+          _typeWeights[_weightKey(
+                subjectName: subjectName,
+                courseType: entry.key,
+              )] =
+              entry.value;
         }
       });
     } catch (e) {
@@ -328,7 +435,10 @@ class _GradesScreenState extends State<GradesScreen> {
   }
 
   Future<void> _resetTypeWeights(String subjectName) async {
-    await _saveTypeWeights(subjectName: subjectName, weightsByType: <String, double>{});
+    await _saveTypeWeights(
+      subjectName: subjectName,
+      weightsByType: <String, double>{},
+    );
   }
 
   Future<void> _openTypeGradeDialog(
@@ -346,7 +456,7 @@ class _GradesScreenState extends State<GradesScreen> {
           context: context,
           builder: (BuildContext dialogContext) {
             final TextEditingController controller = TextEditingController(
-              text: existing?.toString() ?? '',
+              text: existing == null ? '' : existing.toStringAsFixed(0),
             );
             String? errorText;
 
@@ -365,7 +475,8 @@ class _GradesScreenState extends State<GradesScreen> {
                           decimal: true,
                         ),
                         decoration: InputDecoration(
-                          labelText: 'Nota (1 - 10)',
+                          labelText: 'Nota UPT (1 - 10)',
+                          helperText: 'Se accepta doar note intregi.',
                           errorText: errorText,
                         ),
                       ),
@@ -385,21 +496,19 @@ class _GradesScreenState extends State<GradesScreen> {
                         ),
                         FilledButton(
                           onPressed: () {
-                            final String text = controller.text
-                                .trim()
-                                .replaceAll(',', '.');
-                            final double? parsed = double.tryParse(text);
+                            final String text = controller.text.trim();
+                            final int? parsed = int.tryParse(text);
                             if (parsed == null || parsed < 1 || parsed > 10) {
                               setModalState(() {
                                 errorText =
-                                    'Introdu o nota valida intre 1 si 10.';
+                                    'Introdu o nota intreaga intre 1 si 10.';
                               });
                               return;
                             }
 
-                            Navigator.of(
-                              dialogContext,
-                            ).pop(_TypeGradeDialogResult.save(parsed));
+                            Navigator.of(dialogContext).pop(
+                              _TypeGradeDialogResult.save(parsed.toDouble()),
+                            );
                           },
                           child: const Text('Salveaza'),
                         ),
@@ -422,133 +531,150 @@ class _GradesScreenState extends State<GradesScreen> {
   }
 
   Future<void> _openTypeWeightDialog(String subjectName) async {
+    final List<Course> courses;
+    try {
+      courses = await _coursesFuture;
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Nu s-au putut incarca materiile.')),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    final List<String> activeWeightTypes = _activeWeightTypes(
+      subjectName: subjectName,
+      courses: courses,
+    );
     final Map<String, double?> existing = <String, double?>{};
-    for (final String courseType in _courseTypeOptions) {
-      final String key =
-          _weightKey(subjectName: subjectName, courseType: courseType);
-      existing[courseType] = _typeWeights[key];
+    for (final String courseType in activeWeightTypes) {
+      existing[courseType] = _weightForComponent(
+        subjectName: subjectName,
+        componentName: courseType,
+      );
     }
 
     final Map<String, TextEditingController> controllers =
         <String, TextEditingController>{
-      for (final String courseType in _courseTypeOptions)
-        courseType: TextEditingController(
-          text: existing[courseType]?.toString() ?? '',
-        ),
-    };
+          for (final String courseType in activeWeightTypes)
+            courseType: TextEditingController(
+              text: existing[courseType]?.toString() ?? '',
+            ),
+        };
 
-    final _TypeWeightDialogResult? result =
-        await showDialog<_TypeWeightDialogResult>(
-          context: context,
-          builder: (BuildContext dialogContext) {
-            String? errorText;
+    final _TypeWeightDialogResult?
+    result = await showDialog<_TypeWeightDialogResult>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        String? errorText;
 
-            double _parseValue(String raw) {
-              final String cleaned = raw.trim().replaceAll(',', '.');
-              if (cleaned.isEmpty) {
-                return 0;
-              }
-              return double.tryParse(cleaned) ?? double.nan;
-            }
+        double parseValue(String raw) {
+          final String cleaned = raw.trim().replaceAll(',', '.');
+          if (cleaned.isEmpty) {
+            return 0;
+          }
+          return double.tryParse(cleaned) ?? double.nan;
+        }
 
-            return StatefulBuilder(
-              builder:
-                  (
-                    BuildContext context,
-                    void Function(void Function()) setModalState,
-                  ) {
-                    return AlertDialog(
-                      title: Text('Ponderi - $subjectName'),
-                      content: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          ..._courseTypeOptions.map(
-                            (String courseType) => Padding(
-                              padding: const EdgeInsets.only(bottom: 10),
-                              child: TextField(
-                                controller: controllers[courseType],
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(
-                                      decimal: true,
-                                    ),
-                                decoration: InputDecoration(
-                                  labelText: '$courseType (%)',
-                                ),
-                              ),
+        return StatefulBuilder(
+          builder:
+              (
+                BuildContext context,
+                void Function(void Function()) setModalState,
+              ) {
+                return AlertDialog(
+                  title: Text('Ponderi - $subjectName'),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      ...activeWeightTypes.map(
+                        (String courseType) => Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: TextField(
+                            controller: controllers[courseType],
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            decoration: InputDecoration(
+                              labelText: '$courseType (%)',
                             ),
                           ),
-                          if (errorText != null)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Text(
-                                errorText!,
-                                style: TextStyle(
-                                  color: Theme.of(context).colorScheme.error,
-                                ),
-                              ),
-                            ),
-                        ],
+                        ),
                       ),
-                      actions: <Widget>[
-                        if (existing.values.any((double? v) => v != null))
-                          TextButton(
-                            onPressed: () {
-                              Navigator.of(dialogContext).pop(
-                                const _TypeWeightDialogResult.delete(),
-                              );
-                            },
-                            child: const Text('Reseteaza ponderi'),
+                      if (errorText != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            errorText!,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
                           ),
-                        TextButton(
-                          onPressed: () => Navigator.of(dialogContext).pop(),
-                          child: const Text('Renunta'),
                         ),
-                        FilledButton(
-                          onPressed: () {
-                            final Map<String, double> parsed =
-                                <String, double>{};
-                            double total = 0;
+                    ],
+                  ),
+                  actions: <Widget>[
+                    if (existing.values.any((double? v) => v != null))
+                      TextButton(
+                        onPressed: () {
+                          Navigator.of(
+                            dialogContext,
+                          ).pop(const _TypeWeightDialogResult.delete());
+                        },
+                        child: const Text('Reseteaza ponderi'),
+                      ),
+                    TextButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      child: const Text('Renunta'),
+                    ),
+                    FilledButton(
+                      onPressed: () {
+                        final Map<String, double> parsed = <String, double>{};
+                        double total = 0;
 
-                            for (final String courseType
-                                in _courseTypeOptions) {
-                              final double value = _parseValue(
-                                controllers[courseType]?.text ?? '',
-                              );
+                        for (final String courseType in activeWeightTypes) {
+                          final double value = parseValue(
+                            controllers[courseType]?.text ?? '',
+                          );
 
-                              if (value.isNaN || value < 0 || value > 100) {
-                                setModalState(() {
-                                  errorText =
-                                      'Introdu ponderi valide intre 0 si 100.';
-                                });
-                                return;
-                              }
+                          if (value.isNaN || value < 0 || value > 100) {
+                            setModalState(() {
+                              errorText =
+                                  'Introdu ponderi valide intre 0 si 100.';
+                            });
+                            return;
+                          }
 
-                              total += value;
-                              if (value > 0) {
-                                parsed[courseType] = value;
-                              }
-                            }
+                          total += value;
+                          if (value > 0) {
+                            parsed[courseType] = value;
+                          }
+                        }
 
-                            if ((total - 100).abs() > 0.01) {
-                              setModalState(() {
-                                errorText =
-                                    'Suma ponderilor trebuie sa fie 100%.';
-                              });
-                              return;
-                            }
+                        if ((total - 100).abs() > 0.01) {
+                          setModalState(() {
+                            errorText = 'Suma ponderilor trebuie sa fie 100%.';
+                          });
+                          return;
+                        }
 
-                            Navigator.of(dialogContext).pop(
-                              _TypeWeightDialogResult.save(parsed),
-                            );
-                          },
-                          child: const Text('Salveaza'),
-                        ),
-                      ],
-                    );
-                  },
-            );
-          },
+                        Navigator.of(
+                          dialogContext,
+                        ).pop(_TypeWeightDialogResult.save(parsed));
+                      },
+                      child: const Text('Salveaza'),
+                    ),
+                  ],
+                );
+              },
         );
+      },
+    );
 
     if (result == null || !mounted) {
       return;
@@ -565,6 +691,25 @@ class _GradesScreenState extends State<GradesScreen> {
     );
   }
 
+  List<String> _activeWeightTypes({
+    required String subjectName,
+    required List<Course> courses,
+  }) {
+    final Set<String> activeTypes = courses
+        .where((Course course) => course.name.trim() == subjectName.trim())
+        .map((Course course) => _canonicalComponentName(course.courseType))
+        .where(_weightTypeOptions.contains)
+        .toSet();
+
+    if (activeTypes.isEmpty) {
+      activeTypes.add('Examen');
+    }
+
+    return _weightTypeOptions
+        .where(activeTypes.contains)
+        .toList(growable: false);
+  }
+
   List<String> _subjectOptions(List<Course> courses) {
     final Set<String> subjectSet = courses
         .map((Course course) => course.name.trim())
@@ -578,51 +723,89 @@ class _GradesScreenState extends State<GradesScreen> {
     return <String>[_allSubjectsValue, ...subjects];
   }
 
-  double? _calculateSubjectAverage({
-    required Map<String, double?> gradesByType,
-    required Map<String, double?> weightsByType,
+  AcademicSubject _buildAcademicSubject({
+    required String subjectName,
+    required List<Course> courses,
   }) {
-    final bool hasWeights = weightsByType.values.any(
-      (double? value) => value != null && value > 0,
+    final List<Course> subjectCourses = courses
+        .where((Course course) => course.name.trim() == subjectName)
+        .toList(growable: false);
+    final int credits = subjectCourses.fold<int>(
+      0,
+      (int currentMax, Course course) =>
+          course.credits > currentMax ? course.credits : currentMax,
     );
+    final String semester = subjectCourses.isEmpty
+        ? ''
+        : subjectCourses.first.semesterLabel;
 
-    if (!hasWeights) {
-      final List<double> values =
-          gradesByType.values.whereType<double>().toList(growable: false);
-      if (values.isEmpty) {
-        return null;
-      }
+    final Set<String> componentNames = <String>{
+      ...subjectCourses
+          .map((Course course) => _canonicalComponentName(course.courseType))
+          .where((String type) => type.isNotEmpty),
+    };
 
-      final double sum = values.fold<double>(
-        0,
-        (double acc, double v) => acc + v,
-      );
-      return sum / values.length;
+    if (componentNames.isEmpty) {
+      componentNames.add('Examen');
     }
 
-    double totalWeight = 0;
-    double weightedSum = 0;
+    final bool hasConfiguredWeights = componentNames.any(
+      (String componentName) =>
+          (_weightForComponent(
+                subjectName: subjectName,
+                componentName: componentName,
+              ) ??
+              0) >
+          0,
+    );
+    final double defaultWeight = componentNames.isEmpty
+        ? 0
+        : 1 / componentNames.length;
 
-    for (final String courseType in _courseTypeOptions) {
-      final double weight = weightsByType[courseType] ?? 0;
-      if (weight <= 0) {
-        continue;
-      }
+    final List<GradeComponent> components =
+        componentNames
+            .map((String componentName) {
+              return GradeComponent(
+                id: '$subjectName|$componentName',
+                name: componentName,
+                type: _componentTypeFromLabel(componentName),
+                grade: _gradeForComponent(
+                  subjectName: subjectName,
+                  componentName: componentName,
+                ),
+                weight: hasConfiguredWeights
+                    ? ((_weightForComponent(
+                                subjectName: subjectName,
+                                componentName: componentName,
+                              ) ??
+                              0) /
+                          100)
+                    : defaultWeight,
+                isRequired: true,
+                isEliminatory: _isEliminatoryComponent(componentName),
+              );
+            })
+            .toList(growable: false)
+          ..sort((GradeComponent a, GradeComponent b) {
+            final int aIndex = _courseTypeOptions.indexOf(a.name);
+            final int bIndex = _courseTypeOptions.indexOf(b.name);
+            final int normalizedA = aIndex == -1
+                ? _courseTypeOptions.length
+                : aIndex;
+            final int normalizedB = bIndex == -1
+                ? _courseTypeOptions.length
+                : bIndex;
+            return normalizedA.compareTo(normalizedB);
+          });
 
-      final double? grade = gradesByType[courseType];
-      if (grade == null) {
-        return null;
-      }
-
-      totalWeight += weight;
-      weightedSum += grade * (weight / 100);
-    }
-
-    if ((totalWeight - 100).abs() > 0.01) {
-      return null;
-    }
-
-    return weightedSum;
+    return AcademicSubject(
+      id: subjectName,
+      name: subjectName,
+      semester: semester,
+      year: 0,
+      credits: credits,
+      components: components,
+    );
   }
 
   List<SubjectNoteCardData> _buildSubjectCards({
@@ -647,36 +830,57 @@ class _GradesScreenState extends State<GradesScreen> {
         continue;
       }
 
-      final Map<String, double?> gradesByType = <String, double?>{};
-      final Map<String, double?> weightsByType = <String, double?>{};
-      for (final String courseType in _courseTypeOptions) {
-        final String key = _gradeKey(
-          subjectName: subjectName,
-          courseType: courseType,
-        );
-        gradesByType[courseType] = _typeGrades[key];
-
-        final String weightKey = _weightKey(
-          subjectName: subjectName,
-          courseType: courseType,
-        );
-        weightsByType[courseType] = _typeWeights[weightKey];
-      }
+      final AcademicSubject subject = _buildAcademicSubject(
+        subjectName: subjectName,
+        courses: courses,
+      );
+      final SubjectEvaluation evaluation =
+          AcademicProgressCalculator.evaluateSubject(subject);
 
       cards.add(
-        SubjectNoteCardData(
-          subjectName: subjectName,
-          gradesByType: gradesByType,
-          weightsByType: weightsByType,
-          average: _calculateSubjectAverage(
-            gradesByType: gradesByType,
-            weightsByType: weightsByType,
-          ),
-        ),
+        SubjectNoteCardData(subjectName: subjectName, evaluation: evaluation),
       );
     }
 
     return cards;
+  }
+
+  int _totalCredits(List<SubjectNoteCardData> cards) {
+    return cards.fold<int>(
+      0,
+      (int total, SubjectNoteCardData card) =>
+          total + card.evaluation.subject.credits,
+    );
+  }
+
+  int _earnedCredits(List<SubjectNoteCardData> cards) {
+    return cards.fold<int>(
+      0,
+      (int total, SubjectNoteCardData card) =>
+          total + card.evaluation.earnedCredits,
+    );
+  }
+
+  double? _weightedAverage(List<SubjectNoteCardData> cards) {
+    double weightedSum = 0;
+    int creditsWithGrades = 0;
+
+    for (final SubjectNoteCardData card in cards) {
+      final double? average = card.evaluation.finalGrade;
+      final int credits = card.evaluation.subject.credits;
+      if (average == null || credits <= 0 || !card.evaluation.isPromoted) {
+        continue;
+      }
+
+      weightedSum += average * credits;
+      creditsWithGrades += credits;
+    }
+
+    if (creditsWithGrades == 0) {
+      return null;
+    }
+
+    return weightedSum / creditsWithGrades;
   }
 
   void _changeSelectedSubject(String subject) {
@@ -714,6 +918,9 @@ class _GradesScreenState extends State<GradesScreen> {
 
         return GradesScreenView(
           subjectCards: subjectCards,
+          totalCredits: _totalCredits(subjectCards),
+          earnedCredits: _earnedCredits(subjectCards),
+          weightedAverage: _weightedAverage(subjectCards),
           onRefresh: _reload,
           allSubjectsValue: _allSubjectsValue,
           selectedSubject: selectedSubject,
@@ -740,8 +947,8 @@ class _TypeGradeDialogResult {
 class _TypeWeightDialogResult {
   const _TypeWeightDialogResult.save(this.weightsByType) : delete = false;
   const _TypeWeightDialogResult.delete()
-      : weightsByType = const <String, double>{},
-        delete = true;
+    : weightsByType = const <String, double>{},
+      delete = true;
 
   final Map<String, double> weightsByType;
   final bool delete;

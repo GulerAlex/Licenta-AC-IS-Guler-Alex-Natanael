@@ -5,44 +5,56 @@ class GrainBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
     return IgnorePointer(
       child: Stack(
         fit: StackFit.expand,
-        children: const <Widget>[
+        children: <Widget>[
           DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: <Color>[
-                  Color(0xFF102018),
-                  Color(0xFF1B1D1A),
-                  Color(0xFF111411),
-                  Color(0xFF213429),
-                ],
-                stops: <double>[0.0, 0.34, 0.68, 1.0],
+                colors: isDark
+                    ? const <Color>[
+                        Color(0xFF102018),
+                        Color(0xFF1B1D1A),
+                        Color(0xFF111411),
+                        Color(0xFF213429),
+                      ]
+                    : const <Color>[
+                        Color(0xFFF1F8F2),
+                        Color(0xFFEAF3EC),
+                        Color(0xFFF8FBF8),
+                        Color(0xFFE1EFE6),
+                      ],
+                stops: const <double>[0.0, 0.34, 0.68, 1.0],
               ),
             ),
           ),
           DecoratedBox(
             decoration: BoxDecoration(
               gradient: RadialGradient(
-                center: Alignment(-0.82, -0.74),
+                center: const Alignment(-0.82, -0.74),
                 radius: 1.05,
-                colors: <Color>[Color(0x5536B56E), Color(0x001A1D1A)],
+                colors: isDark
+                    ? const <Color>[Color(0x5536B56E), Color(0x001A1D1A)]
+                    : const <Color>[Color(0x3336B56E), Color(0x00F8FBF8)],
               ),
             ),
           ),
           DecoratedBox(
             decoration: BoxDecoration(
               gradient: RadialGradient(
-                center: Alignment(0.86, 0.78),
+                center: const Alignment(0.86, 0.78),
                 radius: 1.2,
-                colors: <Color>[Color(0x4031A866), Color(0x00111311)],
+                colors: isDark
+                    ? const <Color>[Color(0x4031A866), Color(0x00111311)]
+                    : const <Color>[Color(0x2688A892), Color(0x00F1F8F2)],
               ),
             ),
           ),
-          NoiseOverlay(opacity: 0.16),
+          NoiseOverlay(opacity: isDark ? 0.16 : 0.07),
         ],
       ),
     );
