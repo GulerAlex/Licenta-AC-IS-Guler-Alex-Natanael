@@ -9,6 +9,8 @@ class Course {
     required this.room,
     required this.professor,
     required this.sortOrder,
+    this.subjectId = '',
+    this.sessionId = '',
   });
 
   final String name;
@@ -20,6 +22,8 @@ class Course {
   final String room;
   final String professor;
   final int sortOrder;
+  final String subjectId;
+  final String sessionId;
 
   factory Course.fromMap(Map<String, dynamic> map) {
     final dynamic sortOrderRaw = map['sort_order'];
@@ -46,6 +50,8 @@ class Course {
         String value => int.tryParse(value) ?? 0,
         _ => 0,
       },
+      subjectId: (map['subject_id'] as String?) ?? '',
+      sessionId: (map['id'] as String?) ?? '',
     );
   }
 }

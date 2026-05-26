@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:unihub/data/schedule_visibility_store.dart';
 import 'package:unihub/data/unihub_repository.dart';
+import 'package:unihub/models/academic_subject_v2.dart';
+import 'package:unihub/models/class_session.dart';
 import 'package:unihub/models/course.dart';
 import 'package:unihub/screens/ui/calendar_screen_view.dart';
 
@@ -42,37 +44,55 @@ class _CalendarScreenState extends State<CalendarScreen> {
   bool _isEditingCourseType = false;
   bool _isUpdatingSemesterVisibility = false;
   Set<String> _hiddenScheduleSemesters = <String>{};
-  RealtimeChannel? _coursesRealtimeChannel;
+  RealtimeChannel? _academicScheduleRealtimeChannel;
 
   @override
   void initState() {
     super.initState();
     _coursesFuture = _loadCoursesForSemester(_selectedSemester);
     unawaited(_loadScheduleVisibility());
-    _subscribeToCoursesRealtime();
+    _subscribeToAcademicScheduleRealtime();
   }
 
   @override
   void dispose() {
-    final RealtimeChannel? channel = _coursesRealtimeChannel;
+    final RealtimeChannel? channel = _academicScheduleRealtimeChannel;
     if (channel != null) {
       Supabase.instance.client.removeChannel(channel);
     }
     super.dispose();
   }
 
-  void _subscribeToCoursesRealtime() {
+  void _subscribeToAcademicScheduleRealtime() {
     final User? user = Supabase.instance.client.auth.currentUser;
     if (user == null) {
       return;
     }
 
     final RealtimeChannel channel = Supabase.instance.client
-        .channel('materii-courses-user-${user.id}')
+        .channel('materii-academic-schedule-user-${user.id}')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
-          table: 'courses',
+          table: 'subjects',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: user.id,
+          ),
+          callback: (PostgresChangePayload _) {
+            if (!mounted) {
+              return;
+            }
+            setState(() {
+              _coursesFuture = _loadCoursesForSemester(_selectedSemester);
+            });
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'class_sessions',
           filter: PostgresChangeFilter(
             type: PostgresChangeFilterType.eq,
             column: 'user_id',
@@ -89,14 +109,151 @@ class _CalendarScreenState extends State<CalendarScreen> {
         )
         .subscribe();
 
-    _coursesRealtimeChannel = channel;
+    _academicScheduleRealtimeChannel = channel;
   }
 
   Future<List<Course>> _loadCoursesForSemester(String semesterLabel) async {
-    final List<Course> courses = await _repository.fetchCourses(
-      semesterLabel: semesterLabel,
-    );
+    final List<AcademicSubjectV2> subjects = await _repository
+        .fetchSubjectsV2();
+    final List<ClassSession> sessions = await _repository
+        .fetchClassSessionsV2();
+    final List<Course> courses = <Course>[];
+
+    for (final AcademicSubjectV2 subject in subjects.where(
+      (AcademicSubjectV2 subject) =>
+          subject.semesterLabel == semesterLabel && !subject.archived,
+    )) {
+      final List<ClassSession> subjectSessions = sessions
+          .where((ClassSession session) => session.subjectId == subject.id)
+          .toList(growable: false);
+      if (subjectSessions.isEmpty) {
+        courses.add(_pendingCourseFromSubject(subject));
+        continue;
+      }
+      courses.addAll(
+        subjectSessions.map(
+          (ClassSession session) => _courseFromSession(subject, session),
+        ),
+      );
+    }
+
     return courses;
+  }
+
+  Course _pendingCourseFromSubject(AcademicSubjectV2 subject) {
+    return Course(
+      name: subject.name,
+      semesterLabel: subject.semesterLabel,
+      credits: subject.credits,
+      courseType: 'Curs',
+      weekdayLabel: _weekdayOptions.first,
+      time: UniHubRepository.pendingCourseTimeLabel,
+      room: '',
+      professor: subject.professor,
+      sortOrder: 0,
+      subjectId: subject.id,
+    );
+  }
+
+  Course _courseFromSession(AcademicSubjectV2 subject, ClassSession session) {
+    return Course(
+      name: subject.name,
+      semesterLabel: subject.semesterLabel,
+      credits: subject.credits,
+      courseType: session.sessionType,
+      weekdayLabel: _weekdayLabelFromNumber(session.weekday),
+      time: session.intervalLabel,
+      room: session.room,
+      professor: session.professor.trim().isEmpty
+          ? subject.professor
+          : session.professor,
+      sortOrder: session.startsAtMinutes,
+      subjectId: subject.id,
+      sessionId: session.id,
+    );
+  }
+
+  int _weekdayNumberFromLabel(String label) {
+    return switch (label.trim()) {
+      'Luni' => DateTime.monday,
+      'Marti' => DateTime.tuesday,
+      'Miercuri' => DateTime.wednesday,
+      'Joi' => DateTime.thursday,
+      'Vineri' => DateTime.friday,
+      'Sambata' => DateTime.saturday,
+      'Duminica' => DateTime.sunday,
+      _ => DateTime.monday,
+    };
+  }
+
+  String _weekdayLabelFromNumber(int weekday) {
+    return switch (weekday) {
+      DateTime.monday => 'Luni',
+      DateTime.tuesday => 'Marti',
+      DateTime.wednesday => 'Miercuri',
+      DateTime.thursday => 'Joi',
+      DateTime.friday => 'Vineri',
+      DateTime.saturday => 'Sambata',
+      DateTime.sunday => 'Duminica',
+      _ => 'Luni',
+    };
+  }
+
+  int? _parseStartMinutesFromInterval(String value) {
+    return _sortOrderFromTime(value);
+  }
+
+  int? _parseEndMinutesFromInterval(String value) {
+    final RegExpMatch? match = RegExp(
+      r'-\s*(\d{1,2})\s*:\s*(\d{2})',
+    ).firstMatch(value);
+    if (match == null) {
+      return null;
+    }
+    final int hour = int.tryParse(match.group(1) ?? '') ?? 0;
+    final int minute = int.tryParse(match.group(2) ?? '') ?? 0;
+    return (hour * 60) + minute;
+  }
+
+  Future<AcademicSubjectV2?> _findSubject({
+    required String subjectName,
+    required String semesterLabel,
+  }) async {
+    final String normalizedName = subjectName.trim().toLowerCase();
+    final List<AcademicSubjectV2> subjects = await _repository
+        .fetchSubjectsV2();
+    for (final AcademicSubjectV2 subject in subjects) {
+      if (subject.semesterLabel == semesterLabel &&
+          subject.name.trim().toLowerCase() == normalizedName) {
+        return subject;
+      }
+    }
+    return null;
+  }
+
+  ClassSession _classSessionFromCourse({
+    required Course course,
+    required String subjectId,
+    required String sessionId,
+  }) {
+    final int startsAtMinutes =
+        _parseStartMinutesFromInterval(course.time) ?? 0;
+    final int endsAtMinutes =
+        _parseEndMinutesFromInterval(course.time) ?? (startsAtMinutes + 60);
+    final int normalizedEndsAtMinutes = endsAtMinutes
+        .clamp(startsAtMinutes + 1, 1439)
+        .toInt();
+    return ClassSession(
+      id: sessionId,
+      subjectId: subjectId,
+      sessionType: course.courseType,
+      weekday: _weekdayNumberFromLabel(course.weekdayLabel),
+      startsAtMinutes: startsAtMinutes,
+      endsAtMinutes: normalizedEndsAtMinutes,
+      room: course.room,
+      professor: course.professor,
+      active: true,
+    );
   }
 
   Future<void> _loadScheduleVisibility() async {
@@ -194,13 +351,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
     required String subjectName,
     required String semesterLabel,
   }) async {
-    final List<Course> courses = await _repository.fetchCourses(
-      semesterLabel: semesterLabel,
-    );
+    final List<AcademicSubjectV2> subjects = await _repository
+        .fetchSubjectsV2();
     final String normalizedName = subjectName.trim().toLowerCase();
 
-    return courses.any(
-      (Course course) => course.name.trim().toLowerCase() == normalizedName,
+    return subjects.any(
+      (AcademicSubjectV2 subject) =>
+          subject.semesterLabel == semesterLabel &&
+          subject.name.trim().toLowerCase() == normalizedName,
     );
   }
 
@@ -245,10 +403,16 @@ class _CalendarScreenState extends State<CalendarScreen> {
         return;
       }
 
-      await _repository.addCourseSubject(
-        subjectName: newSubject.name,
-        semesterLabel: newSubject.semesterLabel,
-        credits: newSubject.credits,
+      await _repository.upsertSubjectV2(
+        AcademicSubjectV2(
+          id: '',
+          name: newSubject.name,
+          semesterLabel: newSubject.semesterLabel,
+          credits: newSubject.credits,
+          professor: '',
+          colorHex: '#35B86F',
+          archived: false,
+        ),
       );
       if (!mounted) {
         return;
@@ -285,15 +449,18 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Future<void> _openAddDetailsDialog(String subjectName) async {
-    final List<Course> semesterCourses = await _repository.fetchCourses(
+    final AcademicSubjectV2? subject = await _findSubject(
+      subjectName: subjectName,
       semesterLabel: _selectedSemester,
     );
-    Course? subjectReference;
-    for (final Course course in semesterCourses) {
-      if (course.name == subjectName) {
-        subjectReference = course;
-        break;
-      }
+    if (!mounted) {
+      return;
+    }
+    if (subject == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nu am gasit materia selectata.')),
+      );
+      return;
     }
 
     final Course? detailedCourse = await showDialog<Course>(
@@ -302,7 +469,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         return _AddCourseDetailsDialog(
           subjectName: subjectName,
           semesterLabel: _selectedSemester,
-          subjectCredits: subjectReference?.credits ?? 5,
+          subjectCredits: subject.credits,
           weekdayOptions: _weekdayOptions,
           courseTypeOptions: _courseTypeOptions,
           sortOrderFromTime: _sortOrderFromTime,
@@ -315,10 +482,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
 
     try {
-      await _repository.addUserCourse(detailedCourse);
-      await _repository.clearPendingCourseDraft(
-        subjectName: subjectName,
-        semesterLabel: _selectedSemester,
+      await _repository.upsertClassSessionV2(
+        _classSessionFromCourse(
+          course: detailedCourse,
+          subjectId: subject.id,
+          sessionId: '',
+        ),
       );
 
       if (!mounted) {
@@ -347,8 +516,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
       return;
     }
 
-    final List<Course> semesterCourses = await _repository.fetchCourses(
-      semesterLabel: _selectedSemester,
+    final List<Course> semesterCourses = await _loadCoursesForSemester(
+      _selectedSemester,
     );
 
     final List<String> subjects =
@@ -390,10 +559,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
     });
 
     try {
-      final int deletedCount = await _repository.deleteSubjectCourses(
+      final AcademicSubjectV2? subject = await _findSubject(
         subjectName: subjectToDelete,
         semesterLabel: _selectedSemester,
       );
+      if (subject == null) {
+        throw StateError('Subject not found.');
+      }
+      await _repository.deleteSubjectV2(subject.id);
 
       if (!mounted) {
         return;
@@ -403,17 +576,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
         _coursesFuture = _loadCoursesForSemester(_selectedSemester);
       });
 
-      if (deletedCount > 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Materia $subjectToDelete a fost stearsa.')),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Nu am gasit in tabela materia selectata.'),
-          ),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Materia $subjectToDelete a fost stearsa.')),
+      );
     } catch (_) {
       if (!mounted) {
         return;
@@ -470,9 +635,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
     });
 
     try {
-      final int deletedCount = await _repository.deleteCourseTypeEntry(
-        course: course,
-      );
+      if (course.sessionId.trim().isEmpty) {
+        throw StateError('Class session id missing.');
+      }
+      await _repository.deleteClassSessionV2(course.sessionId);
 
       if (!mounted) {
         return;
@@ -482,19 +648,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
         _coursesFuture = _loadCoursesForSemester(_selectedSemester);
       });
 
-      if (deletedCount > 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Tipul de curs a fost sters din tabela.'),
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Nu am gasit in tabela acest tip de curs.'),
-          ),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tipul de curs a fost sters din tabela.')),
+      );
     } catch (_) {
       if (!mounted) {
         return;
@@ -541,9 +697,19 @@ class _CalendarScreenState extends State<CalendarScreen> {
     });
 
     try {
-      final int updatedCount = await _repository.updateCourseTypeEntry(
-        originalCourse: course,
-        updatedCourse: updatedCourse,
+      final String subjectId = course.subjectId.trim().isNotEmpty
+          ? course.subjectId
+          : updatedCourse.subjectId;
+      final String sessionId = course.sessionId;
+      if (subjectId.trim().isEmpty || sessionId.trim().isEmpty) {
+        throw StateError('Class session identity missing.');
+      }
+      await _repository.upsertClassSessionV2(
+        _classSessionFromCourse(
+          course: updatedCourse,
+          subjectId: subjectId,
+          sessionId: sessionId,
+        ),
       );
 
       if (!mounted) {
@@ -554,19 +720,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
         _coursesFuture = _loadCoursesForSemester(_selectedSemester);
       });
 
-      if (updatedCount > 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tipul de curs a fost actualizat.')),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Nu am gasit in tabela cursul selectat pentru editare.',
-            ),
-          ),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tipul de curs a fost actualizat.')),
+      );
     } catch (_) {
       if (!mounted) {
         return;
@@ -1124,6 +1280,8 @@ class _AddCourseDetailsDialogState extends State<_AddCourseDetailsDialog> {
       room: _roomController.text.trim(),
       professor: _professorController.text.trim(),
       sortOrder: widget.sortOrderFromTime(intervalLabel),
+      subjectId: widget.initialCourse?.subjectId ?? '',
+      sessionId: widget.initialCourse?.sessionId ?? '',
     );
 
     Navigator.of(context).pop<Course>(course);
