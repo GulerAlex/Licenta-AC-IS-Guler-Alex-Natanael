@@ -3,6 +3,9 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
+import 'package:unihub/models/academic_event.dart';
+import 'package:unihub/models/academic_subject_v2.dart';
+import 'package:unihub/models/class_session.dart';
 import 'package:unihub/models/course.dart';
 import 'package:unihub/models/exam_event.dart';
 
@@ -95,6 +98,46 @@ class NotificationService {
 
     if (examNotificationsEnabled) {
       await _scheduleExamReminders(exams: exams, now: now);
+    }
+  }
+
+  Future<void> rescheduleAcademicRemindersV2({
+    required List<AcademicSubjectV2> subjects,
+    required List<ClassSession> classSessions,
+    required List<AcademicEvent> events,
+    required Set<String> hiddenScheduleSemesters,
+    required bool courseNotificationsEnabled,
+    required bool examNotificationsEnabled,
+    required int courseReminderMinutes,
+  }) async {
+    if (kIsWeb) {
+      return;
+    }
+    await initialize();
+    await _cancelAcademicReminders();
+
+    final DateTime now = DateTime.now();
+    final Map<String, AcademicSubjectV2> subjectsById =
+        <String, AcademicSubjectV2>{
+          for (final AcademicSubjectV2 subject in subjects) subject.id: subject,
+        };
+
+    if (courseNotificationsEnabled) {
+      await _scheduleClassSessionReminders(
+        subjectsById: subjectsById,
+        classSessions: classSessions,
+        hiddenScheduleSemesters: hiddenScheduleSemesters,
+        now: now,
+        reminderMinutes: courseReminderMinutes,
+      );
+    }
+
+    if (examNotificationsEnabled) {
+      await _scheduleAcademicEventReminders(
+        subjectsById: subjectsById,
+        events: events,
+        now: now,
+      );
     }
   }
 
@@ -201,6 +244,112 @@ class NotificationService {
         return;
       }
     }
+  }
+
+  Future<void> _scheduleClassSessionReminders({
+    required Map<String, AcademicSubjectV2> subjectsById,
+    required List<ClassSession> classSessions,
+    required Set<String> hiddenScheduleSemesters,
+    required DateTime now,
+    required int reminderMinutes,
+  }) async {
+    final DateTime today = DateTime(now.year, now.month, now.day);
+    int index = 0;
+
+    for (final ClassSession session in classSessions) {
+      if (!session.active) {
+        continue;
+      }
+      final AcademicSubjectV2? subject = subjectsById[session.subjectId];
+      if (subject == null ||
+          subject.archived ||
+          hiddenScheduleSemesters.contains(subject.semesterLabel)) {
+        continue;
+      }
+
+      for (int dayOffset = 0; dayOffset < _scheduleDaysAhead; dayOffset++) {
+        final DateTime day = today.add(Duration(days: dayOffset));
+        if (day.weekday != session.weekday) {
+          continue;
+        }
+
+        final DateTime sessionStart = day.add(
+          Duration(minutes: session.startsAtMinutes),
+        );
+        final DateTime reminderAt = sessionStart.subtract(
+          Duration(minutes: reminderMinutes),
+        );
+        if (!reminderAt.isAfter(now)) {
+          continue;
+        }
+
+        await _schedule(
+          id: _courseNotificationStart + index,
+          title: '${session.sessionType} in curand',
+          body:
+              '${subject.name} incepe la ${_formatTime(sessionStart)}'
+              '${session.room.trim().isEmpty ? '' : ' in ${session.room.trim()}'}',
+          scheduledAt: reminderAt,
+          payload: 'class_session:${session.id}',
+        );
+        index += 1;
+        if (_courseNotificationStart + index > _courseNotificationEnd) {
+          return;
+        }
+      }
+    }
+  }
+
+  Future<void> _scheduleAcademicEventReminders({
+    required Map<String, AcademicSubjectV2> subjectsById,
+    required List<AcademicEvent> events,
+    required DateTime now,
+  }) async {
+    int index = 0;
+    for (final AcademicEvent event in events) {
+      final DateTime? eventDate = event.startsAt ?? event.dueAt;
+      if (!event.notificationsEnabled ||
+          eventDate == null ||
+          !eventDate.isAfter(now) ||
+          !_isExamLikeEvent(event.type)) {
+        continue;
+      }
+
+      final DateTime reminderAt = eventDate.subtract(
+        Duration(minutes: event.reminderMinutesBefore),
+      );
+      if (!reminderAt.isAfter(now)) {
+        continue;
+      }
+
+      final String subjectName = event.subjectId == null
+          ? event.title
+          : subjectsById[event.subjectId]?.name ?? event.title;
+
+      await _schedule(
+        id: _examNotificationStart + index,
+        title: '${event.type.label} in curand',
+        body:
+            '$subjectName incepe la ${_formatTime(eventDate)}'
+            '${event.room.trim().isEmpty ? '' : ' in ${event.room.trim()}'}',
+        scheduledAt: reminderAt,
+        payload: 'academic_event:${event.id}',
+      );
+      index += 1;
+      if (_examNotificationStart + index > _examNotificationEnd) {
+        return;
+      }
+    }
+  }
+
+  bool _isExamLikeEvent(AcademicEventType type) {
+    return switch (type) {
+      AcademicEventType.exam ||
+      AcademicEventType.colloquium ||
+      AcademicEventType.retake ||
+      AcademicEventType.project => true,
+      _ => false,
+    };
   }
 
   Future<void> _schedule({

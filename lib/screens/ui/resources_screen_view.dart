@@ -2,8 +2,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
-import 'package:unihub/models/course.dart';
-import 'package:unihub/models/exam_event.dart';
+import 'package:unihub/models/academic_event.dart';
+import 'package:unihub/models/schedule_item.dart';
 
 class ResourcesScreenView extends StatelessWidget {
   const ResourcesScreenView({
@@ -12,8 +12,8 @@ class ResourcesScreenView extends StatelessWidget {
     required this.selectedDay,
     required this.firstVisibleDay,
     required this.calendarFormat,
-    required this.dailyCourses,
-    required this.dailyExams,
+    required this.dailyClasses,
+    required this.dailyEvents,
     required this.selectedDayNote,
     required this.hasNoteForDay,
     required this.hasExamForDay,
@@ -39,21 +39,21 @@ class ResourcesScreenView extends StatelessWidget {
   final DateTime selectedDay;
   final DateTime firstVisibleDay;
   final CalendarFormat calendarFormat;
-  final List<Course> dailyCourses;
-  final List<ExamEvent> dailyExams;
+  final List<ScheduleClassItem> dailyClasses;
+  final List<ScheduleEventItem> dailyEvents;
   final String? selectedDayNote;
   final bool Function(DateTime day) hasNoteForDay;
   final bool Function(DateTime day) hasExamForDay;
   final Future<void> Function() onOpenSelectedDayNoteEditor;
   final Future<void> Function() onOpenAddExam;
-  final Future<void> Function(ExamEvent exam) onEditExam;
-  final Future<void> Function(ExamEvent exam) onDeleteExam;
+  final Future<void> Function(ScheduleEventItem exam) onEditExam;
+  final Future<void> Function(ScheduleEventItem exam) onDeleteExam;
   final Future<void> Function() onOpenNotificationSettings;
   final VoidCallback onGoToToday;
   final void Function(DateTime selectedDay, DateTime focusedDay) onDaySelected;
   final ValueChanged<CalendarFormat> onFormatChanged;
   final ValueChanged<DateTime> onPageChanged;
-  final List<Course> Function(DateTime day) eventLoader;
+  final List<ScheduleClassItem> Function(DateTime day) eventLoader;
   final bool courseNotificationsEnabled;
   final bool examNotificationsEnabled;
   final Future<void> Function() onRefresh;
@@ -105,7 +105,7 @@ class ResourcesScreenView extends StatelessWidget {
                           ),
                         ],
                       ),
-                      TableCalendar<Course>(
+                      TableCalendar<ScheduleClassItem>(
                         firstDay: firstVisibleDay,
                         lastDay: DateTime.utc(2030, 12, 31),
                         focusedDay: focusedDay,
@@ -124,12 +124,12 @@ class ResourcesScreenView extends StatelessWidget {
                         onDaySelected: onDaySelected,
                         onFormatChanged: onFormatChanged,
                         onPageChanged: onPageChanged,
-                        calendarBuilders: CalendarBuilders<Course>(
+                        calendarBuilders: CalendarBuilders<ScheduleClassItem>(
                           markerBuilder:
                               (
                                 BuildContext context,
                                 DateTime day,
-                                List<Course> events,
+                                List<ScheduleClassItem> events,
                               ) {
                                 final bool hasNote = hasNoteForDay(day);
                                 final bool hasExam = hasExamForDay(day);
@@ -263,15 +263,15 @@ class ResourcesScreenView extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (dailyExams.isNotEmpty) ...<Widget>[
+                if (dailyEvents.isNotEmpty) ...<Widget>[
                   const SizedBox(height: 12),
-                  ...dailyExams.map(
-                    (ExamEvent exam) => Padding(
+                  ...dailyEvents.map(
+                    (ScheduleEventItem event) => Padding(
                       padding: const EdgeInsets.only(bottom: 12),
-                      child: _ExamCard(
-                        exam: exam,
-                        onEdit: () => onEditExam(exam),
-                        onDelete: () => onDeleteExam(exam),
+                      child: _AcademicEventCard(
+                        item: event,
+                        onEdit: () => onEditExam(event),
+                        onDelete: () => onDeleteExam(event),
                       ),
                     ),
                   ),
@@ -307,18 +307,18 @@ class ResourcesScreenView extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(height: 12),
-                if (dailyCourses.isEmpty && dailyExams.isEmpty)
+                if (dailyClasses.isEmpty && dailyEvents.isEmpty)
                   const Padding(
                     padding: EdgeInsets.only(top: 28),
                     child: Center(
-                      child: Text('Nu exista cursuri disponibile.'),
+                      child: Text('Nu exista activitati pentru ziua aleasa.'),
                     ),
                   )
                 else
-                  ...dailyCourses.map(
-                    (Course course) => Padding(
+                  ...dailyClasses.map(
+                    (ScheduleClassItem item) => Padding(
                       padding: const EdgeInsets.only(bottom: 12),
-                      child: _CourseCard(course: course),
+                      child: _ClassSessionCard(item: item),
                     ),
                   ),
               ],
@@ -380,20 +380,25 @@ class _GlassCard extends StatelessWidget {
   }
 }
 
-class _ExamCard extends StatelessWidget {
-  const _ExamCard({
-    required this.exam,
+class _AcademicEventCard extends StatelessWidget {
+  const _AcademicEventCard({
+    required this.item,
     required this.onEdit,
     required this.onDelete,
   });
 
-  final ExamEvent exam;
+  final ScheduleEventItem item;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
+    final AcademicEvent event = item.event;
+    final String title = item.subjectName.isNotEmpty
+        ? item.subjectName
+        : item.title;
+    final DateTime? date = event.effectiveDate;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
@@ -431,14 +436,14 @@ class _ExamCard extends StatelessWidget {
                   children: <Widget>[
                     Expanded(
                       child: Text(
-                        exam.subjectName,
+                        title,
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
                     Chip(
-                      label: Text(exam.examType),
+                      label: Text(event.type.label),
                       visualDensity: VisualDensity.compact,
                     ),
                     PopupMenuButton<String>(
@@ -468,29 +473,29 @@ class _ExamCard extends StatelessWidget {
                 _DetailRow(
                   icon: Icons.schedule_rounded,
                   label: 'Ora',
-                  value: _formatTime(exam.startsAt),
+                  value: date == null ? 'Nesetata' : _formatTime(date),
                 ),
-                if (exam.room.trim().isNotEmpty) ...<Widget>[
+                if (event.room.trim().isNotEmpty) ...<Widget>[
                   const SizedBox(height: 8),
                   _DetailRow(
                     icon: Icons.room_outlined,
                     label: 'Sala',
-                    value: exam.room,
+                    value: event.room,
                   ),
                 ],
                 const SizedBox(height: 8),
                 _DetailRow(
-                  icon: exam.notificationsEnabled
+                  icon: event.notificationsEnabled
                       ? Icons.notifications_active_rounded
                       : Icons.notifications_off_outlined,
                   label: 'Reminder',
-                  value: exam.notificationsEnabled
-                      ? _formatReminder(exam.reminderMinutesBefore)
+                  value: event.notificationsEnabled
+                      ? _formatReminder(event.reminderMinutesBefore)
                       : 'Dezactivat',
                 ),
-                if (exam.notes.trim().isNotEmpty) ...<Widget>[
+                if (event.notes.trim().isNotEmpty) ...<Widget>[
                   const SizedBox(height: 8),
-                  Text(exam.notes.trim()),
+                  Text(event.notes.trim()),
                 ],
               ],
             ),
@@ -501,14 +506,15 @@ class _ExamCard extends StatelessWidget {
   }
 }
 
-class _CourseCard extends StatelessWidget {
-  const _CourseCard({required this.course});
+class _ClassSessionCard extends StatelessWidget {
+  const _ClassSessionCard({required this.item});
 
-  final Course course;
+  final ScheduleClassItem item;
 
   @override
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
+    final String professor = item.professor;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
@@ -546,14 +552,14 @@ class _CourseCard extends StatelessWidget {
                   children: <Widget>[
                     Expanded(
                       child: Text(
-                        course.name,
+                        item.subject.name,
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
                     Chip(
-                      label: Text(course.courseType),
+                      label: Text(item.session.sessionType),
                       visualDensity: VisualDensity.compact,
                     ),
                   ],
@@ -562,20 +568,24 @@ class _CourseCard extends StatelessWidget {
                 _DetailRow(
                   icon: Icons.access_time_rounded,
                   label: 'Interval',
-                  value: course.time,
+                  value: item.session.intervalLabel,
                 ),
-                const SizedBox(height: 8),
-                _DetailRow(
-                  icon: Icons.room_outlined,
-                  label: 'Sala',
-                  value: course.room,
-                ),
-                const SizedBox(height: 8),
-                _DetailRow(
-                  icon: Icons.person_outline_rounded,
-                  label: 'Profesor',
-                  value: course.professor,
-                ),
+                if (item.session.room.trim().isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 8),
+                  _DetailRow(
+                    icon: Icons.room_outlined,
+                    label: 'Sala',
+                    value: item.session.room,
+                  ),
+                ],
+                if (professor.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 8),
+                  _DetailRow(
+                    icon: Icons.person_outline_rounded,
+                    label: 'Profesor',
+                    value: professor,
+                  ),
+                ],
               ],
             ),
           ),

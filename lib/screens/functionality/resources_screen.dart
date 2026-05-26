@@ -8,8 +8,10 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:unihub/data/app_preferences_store.dart';
 import 'package:unihub/data/schedule_visibility_store.dart';
 import 'package:unihub/data/unihub_repository.dart';
-import 'package:unihub/models/course.dart';
-import 'package:unihub/models/exam_event.dart';
+import 'package:unihub/models/academic_event.dart';
+import 'package:unihub/models/academic_subject_v2.dart';
+import 'package:unihub/models/class_session.dart';
+import 'package:unihub/models/schedule_item.dart';
 import 'package:unihub/screens/ui/resources_screen_view.dart';
 import 'package:unihub/services/notification_service.dart';
 
@@ -32,14 +34,14 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
   late DateTime _selectedDay;
   CalendarFormat _calendarFormat = CalendarFormat.week;
   Map<String, String> _notesByDay = <String, String>{};
-  List<Course> _customCourses = <Course>[];
-  List<ExamEvent> _examEvents = <ExamEvent>[];
+  List<AcademicSubjectV2> _subjects = <AcademicSubjectV2>[];
+  List<ClassSession> _classSessions = <ClassSession>[];
+  List<AcademicEvent> _academicEvents = <AcademicEvent>[];
   Set<String> _hiddenScheduleSemesters = <String>{};
   bool _isLoadingCourses = false;
   bool _hasLoadError = false;
-  RealtimeChannel? _coursesRealtimeChannel;
+  RealtimeChannel? _scheduleRealtimeChannel;
   RealtimeChannel? _notesRealtimeChannel;
-  RealtimeChannel? _examEventsRealtimeChannel;
 
   @override
   void initState() {
@@ -49,24 +51,19 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
     unawaited(_initializeData());
     _visibilityStore.version.addListener(_handleScheduleVisibilityChanged);
     _preferences.addListener(_handleNotificationPreferencesChanged);
-    _subscribeToCoursesRealtime();
+    _subscribeToScheduleRealtime();
     _subscribeToNotesRealtime();
-    _subscribeToExamEventsRealtime();
   }
 
   @override
   void dispose() {
-    final RealtimeChannel? channel = _coursesRealtimeChannel;
+    final RealtimeChannel? channel = _scheduleRealtimeChannel;
     if (channel != null) {
       Supabase.instance.client.removeChannel(channel);
     }
     final RealtimeChannel? notesChannel = _notesRealtimeChannel;
     if (notesChannel != null) {
       Supabase.instance.client.removeChannel(notesChannel);
-    }
-    final RealtimeChannel? examEventsChannel = _examEventsRealtimeChannel;
-    if (examEventsChannel != null) {
-      Supabase.instance.client.removeChannel(examEventsChannel);
     }
     _visibilityStore.version.removeListener(_handleScheduleVisibilityChanged);
     _preferences.removeListener(_handleNotificationPreferencesChanged);
@@ -77,8 +74,7 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
     await _migrateLocalNotesIfNeeded();
     await _loadScheduleVisibility();
     await _loadNotes();
-    await _loadExamEvents();
-    await _syncCoursesFromSupabase(showLoader: false);
+    await _syncScheduleFromSupabase(showLoader: false);
     await _rescheduleNotifications();
   }
 
@@ -102,18 +98,18 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
     unawaited(_rescheduleNotifications());
   }
 
-  void _subscribeToCoursesRealtime() {
+  void _subscribeToScheduleRealtime() {
     final User? user = Supabase.instance.client.auth.currentUser;
     if (user == null) {
       return;
     }
 
     final RealtimeChannel channel = Supabase.instance.client
-        .channel('courses-user-${user.id}')
+        .channel('academic-schedule-user-${user.id}')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
-          table: 'courses',
+          table: 'subjects',
           filter: PostgresChangeFilter(
             type: PostgresChangeFilterType.eq,
             column: 'user_id',
@@ -123,12 +119,44 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
             if (!mounted) {
               return;
             }
-            unawaited(_syncCoursesFromSupabase(showLoader: false));
+            unawaited(_syncScheduleFromSupabase(showLoader: false));
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'class_sessions',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: user.id,
+          ),
+          callback: (PostgresChangePayload _) {
+            if (!mounted) {
+              return;
+            }
+            unawaited(_syncScheduleFromSupabase(showLoader: false));
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'academic_events',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: user.id,
+          ),
+          callback: (PostgresChangePayload _) {
+            if (!mounted) {
+              return;
+            }
+            unawaited(_syncScheduleFromSupabase(showLoader: false));
           },
         )
         .subscribe();
 
-    _coursesRealtimeChannel = channel;
+    _scheduleRealtimeChannel = channel;
   }
 
   void _subscribeToNotesRealtime() {
@@ -157,32 +185,6 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
     _notesRealtimeChannel = channel;
   }
 
-  void _subscribeToExamEventsRealtime() {
-    final User? user = Supabase.instance.client.auth.currentUser;
-    if (user == null) {
-      return;
-    }
-
-    final RealtimeChannel channel = Supabase.instance.client
-        .channel('exam-events-user-${user.id}')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'exam_events',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'user_id',
-            value: user.id,
-          ),
-          callback: (PostgresChangePayload _) {
-            unawaited(_loadExamEvents());
-          },
-        )
-        .subscribe();
-
-    _examEventsRealtimeChannel = channel;
-  }
-
   Future<void> _loadNotes() async {
     try {
       final Map<String, String> notes = await _repository.fetchResourceNotes();
@@ -194,21 +196,6 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
       });
     } catch (e) {
       debugPrint('Failed to load resource notes: $e');
-    }
-  }
-
-  Future<void> _loadExamEvents() async {
-    try {
-      final List<ExamEvent> exams = await _repository.fetchExamEvents();
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _examEvents = exams;
-      });
-      unawaited(_rescheduleNotifications());
-    } catch (e) {
-      debugPrint('Failed to load exam events: $e');
     }
   }
 
@@ -246,9 +233,8 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
   }
 
   Future<void> _reload() async {
-    await _syncCoursesFromSupabase(showLoader: true);
+    await _syncScheduleFromSupabase(showLoader: true);
     await _loadNotes();
-    await _loadExamEvents();
     await _rescheduleNotifications();
   }
 
@@ -260,7 +246,7 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
     });
   }
 
-  int _courseTypeOrder(String courseType) {
+  int _sessionTypeOrder(String courseType) {
     return switch (courseType) {
       'Curs' => 0,
       'Seminar' => 1,
@@ -393,7 +379,7 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
     await _saveNoteForSelectedDay(result);
   }
 
-  Future<void> _syncCoursesFromSupabase({required bool showLoader}) async {
+  Future<void> _syncScheduleFromSupabase({required bool showLoader}) async {
     if (showLoader && mounted) {
       setState(() {
         _isLoadingCourses = true;
@@ -402,14 +388,24 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
     }
 
     try {
-      final List<Course> remoteCourses = await _repository.fetchUserCourses();
+      final List<AcademicSubjectV2> subjects = await _repository
+          .fetchSubjectsV2();
+      final List<ClassSession> sessions = await _repository
+          .fetchClassSessionsV2();
+      final List<AcademicEvent> events = await _repository
+          .fetchAcademicEventsV2(
+            from: DateTime.now().subtract(const Duration(days: 365)),
+            to: DateTime.utc(2030, 12, 31),
+          );
 
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _customCourses = remoteCourses;
+        _subjects = subjects;
+        _classSessions = sessions;
+        _academicEvents = events;
         _isLoadingCourses = false;
         _hasLoadError = false;
       });
@@ -425,40 +421,77 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
     }
   }
 
-  List<Course> _coursesForDay(List<Course> courses, DateTime day) {
-    final String dayLabel = _weekdayLabel(day.weekday);
-    final List<Course> filtered = courses
+  Map<String, AcademicSubjectV2> get _subjectsById {
+    return <String, AcademicSubjectV2>{
+      for (final AcademicSubjectV2 subject in _subjects) subject.id: subject,
+    };
+  }
+
+  List<ScheduleClassItem> _classesForDay(DateTime day) {
+    final Map<String, AcademicSubjectV2> subjectsById = _subjectsById;
+    final List<ScheduleClassItem> filtered = _classSessions
+        .where((ClassSession session) => session.active)
+        .map((ClassSession session) {
+          final AcademicSubjectV2? subject = subjectsById[session.subjectId];
+          if (subject == null || subject.archived) {
+            return null;
+          }
+          return ScheduleClassItem(subject: subject, session: session);
+        })
+        .whereType<ScheduleClassItem>()
         .where(
-          (Course course) =>
-              !_hiddenScheduleSemesters.contains(course.semesterLabel) &&
-              course.weekdayLabel == dayLabel &&
-              course.time != UniHubRepository.pendingCourseTimeLabel,
+          (ScheduleClassItem item) =>
+              !_hiddenScheduleSemesters.contains(item.subject.semesterLabel) &&
+              item.session.weekday == day.weekday,
         )
         .toList();
 
-    filtered.sort((Course a, Course b) {
-      if (a.sortOrder != b.sortOrder) {
-        return a.sortOrder.compareTo(b.sortOrder);
+    filtered.sort((ScheduleClassItem a, ScheduleClassItem b) {
+      if (a.session.startsAtMinutes != b.session.startsAtMinutes) {
+        return a.session.startsAtMinutes.compareTo(b.session.startsAtMinutes);
       }
-      return _courseTypeOrder(
-        a.courseType,
-      ).compareTo(_courseTypeOrder(b.courseType));
+      return _sessionTypeOrder(
+        a.session.sessionType,
+      ).compareTo(_sessionTypeOrder(b.session.sessionType));
     });
 
     return filtered;
   }
 
-  List<ExamEvent> _examsForDay(List<ExamEvent> exams, DateTime day) {
+  List<ScheduleEventItem> _eventsForDay(DateTime day) {
     final DateTime normalizedDay = _normalizedDate(day);
-    final List<ExamEvent> filtered = exams
+    final Map<String, AcademicSubjectV2> subjectsById = _subjectsById;
+    final List<ScheduleEventItem> filtered = _academicEvents
         .where(
-          (ExamEvent exam) => _normalizedDate(exam.startsAt) == normalizedDay,
+          (AcademicEvent event) =>
+              event.effectiveDate != null &&
+              _normalizedDate(event.effectiveDate!) == normalizedDay,
+        )
+        .map(
+          (AcademicEvent event) => ScheduleEventItem(
+            event: event,
+            subject: event.subjectId == null
+                ? null
+                : subjectsById[event.subjectId],
+          ),
         )
         .toList();
-    filtered.sort(
-      (ExamEvent a, ExamEvent b) => a.startsAt.compareTo(b.startsAt),
-    );
+    filtered.sort((ScheduleEventItem a, ScheduleEventItem b) {
+      final DateTime aDate = a.event.effectiveDate ?? DateTime(9999);
+      final DateTime bDate = b.event.effectiveDate ?? DateTime(9999);
+      return aDate.compareTo(bDate);
+    });
     return filtered;
+  }
+
+  bool _isExamLikeEvent(ScheduleEventItem item) {
+    return switch (item.event.type) {
+      AcademicEventType.exam ||
+      AcademicEventType.colloquium ||
+      AcademicEventType.retake ||
+      AcademicEventType.project => true,
+      _ => false,
+    };
   }
 
   Future<void> _rescheduleNotifications() async {
@@ -468,9 +501,10 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
       return;
     }
 
-    await _notificationService.rescheduleAcademicReminders(
-      courses: _customCourses,
-      exams: _examEvents,
+    await _notificationService.rescheduleAcademicRemindersV2(
+      subjects: _subjects,
+      classSessions: _classSessions,
+      events: _academicEvents,
       hiddenScheduleSemesters: _hiddenScheduleSemesters,
       courseNotificationsEnabled: _preferences.courseNotificationsEnabled,
       examNotificationsEnabled: _preferences.examNotificationsEnabled,
@@ -510,13 +544,12 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
   }
 
   Future<void> _openAddExamDialog() async {
-    final List<String> subjects = _subjectOptions();
-    final ExamEvent? draft = await showDialog<ExamEvent>(
+    final AcademicEvent? draft = await showDialog<AcademicEvent>(
       context: context,
       builder: (BuildContext dialogContext) {
         return _ExamEventDialog(
           selectedDay: _selectedDay,
-          subjects: subjects,
+          subjects: _subjects,
           defaultReminderMinutes: _preferences.examReminderMinutes,
         );
       },
@@ -527,8 +560,8 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
     }
 
     try {
-      await _repository.addExamEvent(draft);
-      await _loadExamEvents();
+      await _repository.upsertAcademicEventV2(draft);
+      await _syncScheduleFromSupabase(showLoader: false);
       if (!mounted) {
         return;
       }
@@ -545,15 +578,16 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
     }
   }
 
-  Future<void> _editExamEvent(ExamEvent exam) async {
-    final ExamEvent? updated = await showDialog<ExamEvent>(
+  Future<void> _editExamEvent(ScheduleEventItem item) async {
+    final AcademicEvent event = item.event;
+    final AcademicEvent? updated = await showDialog<AcademicEvent>(
       context: context,
       builder: (BuildContext dialogContext) {
         return _ExamEventDialog(
-          selectedDay: _normalizedDate(exam.startsAt),
-          subjects: _subjectOptions(),
+          selectedDay: _normalizedDate(event.effectiveDate ?? DateTime.now()),
+          subjects: _subjects,
           defaultReminderMinutes: _preferences.examReminderMinutes,
-          initialEvent: exam,
+          initialEvent: event,
         );
       },
     );
@@ -563,8 +597,8 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
     }
 
     try {
-      await _repository.updateExamEvent(updated);
-      await _loadExamEvents();
+      await _repository.upsertAcademicEventV2(updated);
+      await _syncScheduleFromSupabase(showLoader: false);
       if (!mounted) {
         return;
       }
@@ -581,14 +615,18 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
     }
   }
 
-  Future<void> _deleteExamEvent(ExamEvent exam) async {
+  Future<void> _deleteExamEvent(ScheduleEventItem item) async {
+    final AcademicEvent event = item.event;
+    final String label = item.subjectName.isNotEmpty
+        ? item.subjectName
+        : item.title;
     final bool shouldDelete =
         await showDialog<bool>(
           context: context,
           builder: (BuildContext dialogContext) {
             return AlertDialog(
-              title: const Text('Sterge examen'),
-              content: Text('Stergi ${exam.examType} la ${exam.subjectName}?'),
+              title: const Text('Sterge eveniment'),
+              content: Text('Stergi ${event.type.label} la $label?'),
               actions: <Widget>[
                 TextButton(
                   onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -609,8 +647,8 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
     }
 
     try {
-      await _repository.deleteExamEvent(exam.id);
-      await _loadExamEvents();
+      await _repository.deleteAcademicEventV2(event.id);
+      await _syncScheduleFromSupabase(showLoader: false);
       if (!mounted) {
         return;
       }
@@ -627,35 +665,21 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
     }
   }
 
-  List<String> _subjectOptions() {
-    final Set<String> subjects = _customCourses
-        .map((Course course) => course.name.trim())
-        .where((String subject) => subject.isNotEmpty)
-        .toSet();
-    return subjects.toList(
-      growable: false,
-    )..sort((String a, String b) => a.toLowerCase().compareTo(b.toLowerCase()));
-  }
-
   @override
   Widget build(BuildContext context) {
-    final List<Course> dailyCourses = _coursesForDay(
-      _customCourses,
-      _selectedDay,
-    );
-    final List<ExamEvent> dailyExams = _examsForDay(_examEvents, _selectedDay);
+    final List<ScheduleClassItem> dailyClasses = _classesForDay(_selectedDay);
+    final List<ScheduleEventItem> dailyEvents = _eventsForDay(_selectedDay);
 
     return ResourcesScreenView(
       focusedDay: _focusedDay,
       selectedDay: _selectedDay,
       firstVisibleDay: _startOfCurrentWeek(),
       calendarFormat: _calendarFormat,
-      dailyCourses: dailyCourses,
-      dailyExams: dailyExams,
+      dailyClasses: dailyClasses,
+      dailyEvents: dailyEvents,
       selectedDayNote: _selectedDayNote(),
       hasNoteForDay: _hasNoteForDay,
-      hasExamForDay: (DateTime day) =>
-          _examsForDay(_examEvents, day).isNotEmpty,
+      hasExamForDay: (DateTime day) => _eventsForDay(day).any(_isExamLikeEvent),
       onOpenSelectedDayNoteEditor: _openSelectedDayNoteEditor,
       onOpenAddExam: _openAddExamDialog,
       onEditExam: _editExamEvent,
@@ -678,7 +702,7 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
           _focusedDay = _normalizedDate(focusedDay);
         });
       },
-      eventLoader: (DateTime day) => _coursesForDay(_customCourses, day),
+      eventLoader: _classesForDay,
       courseNotificationsEnabled: _preferences.courseNotificationsEnabled,
       examNotificationsEnabled: _preferences.examNotificationsEnabled,
       onRefresh: _reload,
@@ -857,9 +881,9 @@ class _ExamEventDialog extends StatefulWidget {
   });
 
   final DateTime selectedDay;
-  final List<String> subjects;
+  final List<AcademicSubjectV2> subjects;
   final int defaultReminderMinutes;
-  final ExamEvent? initialEvent;
+  final AcademicEvent? initialEvent;
 
   @override
   State<_ExamEventDialog> createState() => _ExamEventDialogState();
@@ -867,21 +891,21 @@ class _ExamEventDialog extends StatefulWidget {
 
 class _ExamEventDialogState extends State<_ExamEventDialog> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-  final TextEditingController _subjectController = TextEditingController();
   final TextEditingController _roomController = TextEditingController();
   final TextEditingController _notesController = TextEditingController();
 
   late DateTime _selectedDate;
   late TimeOfDay _selectedTime;
-  late String _selectedExamType;
+  late AcademicEventType _selectedExamType;
+  String? _selectedSubjectId;
   late int _selectedReminderMinutes;
   late bool _notificationsEnabled;
 
-  static const List<String> _examTypes = <String>[
-    'Examen',
-    'Colocviu',
-    'Restanta',
-    'Proiect',
+  static const List<AcademicEventType> _examTypes = <AcademicEventType>[
+    AcademicEventType.exam,
+    AcademicEventType.colloquium,
+    AcademicEventType.retake,
+    AcademicEventType.project,
   ];
 
   static const Map<int, String> _reminderOptions = <int, String>{
@@ -894,16 +918,17 @@ class _ExamEventDialogState extends State<_ExamEventDialog> {
   @override
   void initState() {
     super.initState();
-    final ExamEvent? initialEvent = widget.initialEvent;
-    _selectedDate = initialEvent != null
-        ? DateTime(
-            initialEvent.startsAt.year,
-            initialEvent.startsAt.month,
-            initialEvent.startsAt.day,
-          )
-        : widget.selectedDay;
+    final AcademicEvent? initialEvent = widget.initialEvent;
+    final DateTime initialDate =
+        initialEvent?.effectiveDate ?? widget.selectedDay;
+    _selectedDate = DateTime(
+      initialDate.year,
+      initialDate.month,
+      initialDate.day,
+    );
     _selectedTime = TimeOfDay.fromDateTime(
       initialEvent?.startsAt ??
+          initialEvent?.dueAt ??
           DateTime(
             _selectedDate.year,
             _selectedDate.month,
@@ -911,20 +936,25 @@ class _ExamEventDialogState extends State<_ExamEventDialog> {
             9,
           ),
     );
-    _selectedExamType = initialEvent?.examType ?? _examTypes.first;
+    _selectedExamType = initialEvent?.type ?? _examTypes.first;
+    final String? initialSubjectId = initialEvent?.subjectId;
+    final bool hasInitialSubject =
+        initialSubjectId != null &&
+        widget.subjects.any(
+          (AcademicSubjectV2 subject) => subject.id == initialSubjectId,
+        );
+    _selectedSubjectId = hasInitialSubject
+        ? initialSubjectId
+        : (widget.subjects.isNotEmpty ? widget.subjects.first.id : null);
     _selectedReminderMinutes =
         initialEvent?.reminderMinutesBefore ?? widget.defaultReminderMinutes;
     _notificationsEnabled = initialEvent?.notificationsEnabled ?? true;
-    _subjectController.text =
-        initialEvent?.subjectName ??
-        (widget.subjects.isNotEmpty ? widget.subjects.first : '');
     _roomController.text = initialEvent?.room ?? '';
     _notesController.text = initialEvent?.notes ?? '';
   }
 
   @override
   void dispose() {
-    _subjectController.dispose();
     _roomController.dispose();
     _notesController.dispose();
     super.dispose();
@@ -978,14 +1008,18 @@ class _ExamEventDialogState extends State<_ExamEventDialog> {
       return;
     }
 
-    Navigator.of(context).pop<ExamEvent>(
-      ExamEvent(
+    Navigator.of(context).pop<AcademicEvent>(
+      AcademicEvent(
         id: widget.initialEvent?.id ?? '',
-        subjectName: _subjectController.text.trim(),
-        examType: _selectedExamType,
+        subjectId: _selectedSubjectId,
+        type: _selectedExamType,
+        title: _selectedExamType.label,
         startsAt: startsAt,
+        dueAt: null,
         room: _roomController.text.trim(),
         notes: _notesController.text.trim(),
+        priority: widget.initialEvent?.priority ?? AcademicPriority.high,
+        status: widget.initialEvent?.status ?? AcademicEventStatus.planned,
         reminderMinutesBefore: _selectedReminderMinutes,
         notificationsEnabled: _notificationsEnabled,
       ),
@@ -994,13 +1028,10 @@ class _ExamEventDialogState extends State<_ExamEventDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final List<String> subjectOptions =
-        <String>{
-          ...widget.subjects,
-          if (_subjectController.text.trim().isNotEmpty)
-            _subjectController.text.trim(),
-        }.toList(growable: false)..sort(
-          (String a, String b) => a.toLowerCase().compareTo(b.toLowerCase()),
+    final List<AcademicSubjectV2> subjectOptions =
+        List<AcademicSubjectV2>.of(widget.subjects)..sort(
+          (AcademicSubjectV2 a, AcademicSubjectV2 b) =>
+              a.name.toLowerCase().compareTo(b.name.toLowerCase()),
         );
     final Map<int, String> reminderOptions = <int, String>{
       ..._reminderOptions,
@@ -1022,44 +1053,43 @@ class _ExamEventDialogState extends State<_ExamEventDialog> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                if (subjectOptions.isEmpty)
-                  TextFormField(
-                    controller: _subjectController,
-                    decoration: const InputDecoration(labelText: 'Materie'),
-                    validator: _requiredValidator,
-                  )
-                else
+                if (subjectOptions.isNotEmpty)
                   DropdownButtonFormField<String>(
-                    initialValue: _subjectController.text,
+                    initialValue: _selectedSubjectId,
                     decoration: const InputDecoration(labelText: 'Materie'),
                     items: subjectOptions
                         .map(
-                          (String subject) => DropdownMenuItem<String>(
-                            value: subject,
-                            child: Text(subject),
-                          ),
+                          (AcademicSubjectV2 subject) =>
+                              DropdownMenuItem<String>(
+                                value: subject.id,
+                                child: Text(subject.name),
+                              ),
                         )
                         .toList(growable: false),
                     onChanged: (String? value) {
-                      if (value == null) {
-                        return;
-                      }
-                      _subjectController.text = value;
+                      setState(() {
+                        _selectedSubjectId = value;
+                      });
                     },
+                  )
+                else
+                  const Text(
+                    'Nu ai materii in schema noua. Poti salva evenimentul fara materie.',
                   ),
                 const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
+                DropdownButtonFormField<AcademicEventType>(
                   initialValue: _selectedExamType,
                   decoration: const InputDecoration(labelText: 'Tip'),
                   items: _examTypes
                       .map(
-                        (String type) => DropdownMenuItem<String>(
-                          value: type,
-                          child: Text(type),
-                        ),
+                        (AcademicEventType type) =>
+                            DropdownMenuItem<AcademicEventType>(
+                              value: type,
+                              child: Text(type.label),
+                            ),
                       )
                       .toList(growable: false),
-                  onChanged: (String? value) {
+                  onChanged: (AcademicEventType? value) {
                     if (value == null) {
                       return;
                     }
@@ -1146,13 +1176,6 @@ class _ExamEventDialogState extends State<_ExamEventDialog> {
         FilledButton(onPressed: _submit, child: const Text('Salveaza')),
       ],
     );
-  }
-
-  String? _requiredValidator(String? value) {
-    if ((value ?? '').trim().isEmpty) {
-      return 'Camp obligatoriu';
-    }
-    return null;
   }
 
   String _formatReminderLabel(int minutes) {
