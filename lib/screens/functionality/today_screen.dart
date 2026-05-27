@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:unihub/data/schedule_visibility_store.dart';
 import 'package:unihub/data/unihub_repository.dart';
 import 'package:unihub/models/academic_event.dart';
 import 'package:unihub/models/academic_subject_v2.dart';
@@ -26,12 +27,30 @@ class TodayScreen extends StatefulWidget {
 
 class _TodayScreenState extends State<TodayScreen> {
   final UniHubRepository _repository = UniHubRepository.instance;
+  final ScheduleVisibilityStore _visibilityStore =
+      ScheduleVisibilityStore.instance;
   late Future<TodayOverview> _overviewFuture;
 
   @override
   void initState() {
     super.initState();
     _overviewFuture = _loadOverview();
+    _visibilityStore.version.addListener(_handleScheduleVisibilityChanged);
+  }
+
+  @override
+  void dispose() {
+    _visibilityStore.version.removeListener(_handleScheduleVisibilityChanged);
+    super.dispose();
+  }
+
+  void _handleScheduleVisibilityChanged() {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _overviewFuture = _loadOverview();
+    });
   }
 
   Future<void> _reload() async {
@@ -58,15 +77,24 @@ class _TodayScreenState extends State<TodayScreen> {
     final DateTime now = DateTime.now();
     final DateTime today = DateTime(now.year, now.month, now.day);
     final DateTime horizon = today.add(const Duration(days: 14));
+    final Set<String> hiddenScheduleSemesters = await _visibilityStore
+        .fetchHiddenSemesters();
 
     final List<AcademicSubjectV2> subjects =
         await _loadTodaySection<AcademicSubjectV2>(
           'subjects',
           _repository.fetchSubjectsV2,
         );
+    final List<AcademicSubjectV2> visibleSubjects = subjects
+        .where(
+          (AcademicSubjectV2 subject) =>
+              !hiddenScheduleSemesters.contains(subject.semesterLabel),
+        )
+        .toList(growable: false);
     final Map<String, AcademicSubjectV2> subjectsById =
         <String, AcademicSubjectV2>{
-          for (final AcademicSubjectV2 subject in subjects) subject.id: subject,
+          for (final AcademicSubjectV2 subject in visibleSubjects)
+            subject.id: subject,
         };
 
     final List<ClassSession> sessions = await _loadTodaySection<ClassSession>(
@@ -126,7 +154,9 @@ class _TodayScreenState extends State<TodayScreen> {
               return date != null &&
                   date.isAfter(now.subtract(const Duration(minutes: 1))) &&
                   event.status != AcademicEventStatus.cancelled &&
-                  event.status != AcademicEventStatus.done;
+                  event.status != AcademicEventStatus.done &&
+                  (event.subjectId == null ||
+                      subjectsById.containsKey(event.subjectId));
             })
             .map(
               (AcademicEvent event) => TodayEventItem(
@@ -148,7 +178,9 @@ class _TodayScreenState extends State<TodayScreen> {
             .where(
               (StudyTask task) =>
                   task.status != StudyTaskStatus.done &&
-                  task.status != StudyTaskStatus.cancelled,
+                  task.status != StudyTaskStatus.cancelled &&
+                  (task.subjectId == null ||
+                      subjectsById.containsKey(task.subjectId)),
             )
             .map(
               (StudyTask task) => TodayTaskItem(
@@ -203,11 +235,11 @@ class _TodayScreenState extends State<TodayScreen> {
       openTasks: openTasks.take(5).toList(growable: false),
       risks: risks.take(5).toList(growable: false),
       hasAnyData:
-          subjects.isNotEmpty ||
-          sessions.isNotEmpty ||
-          events.isNotEmpty ||
-          tasks.isNotEmpty ||
-          gradeComponents.isNotEmpty,
+          visibleSubjects.isNotEmpty ||
+          todayClasses.isNotEmpty ||
+          upcomingEvents.isNotEmpty ||
+          openTasks.isNotEmpty ||
+          risks.isNotEmpty,
     );
   }
 
