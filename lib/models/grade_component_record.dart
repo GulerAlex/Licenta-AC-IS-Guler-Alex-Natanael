@@ -7,6 +7,24 @@ enum GradeComponentRecordType {
   other,
 }
 
+const String defaultGradeComponentName = 'Examen';
+const String fallbackGradeComponentName = 'Alta componenta';
+
+const List<String> gradeComponentLabels = <String>[
+  defaultGradeComponentName,
+  'Seminar',
+  'Laborator',
+  'Proiect',
+  'Activitate pe parcurs',
+  fallbackGradeComponentName,
+];
+
+const List<String> weightedGradeComponentLabels = <String>[
+  defaultGradeComponentName,
+  'Seminar',
+  'Laborator',
+];
+
 class GradeComponentRecord {
   const GradeComponentRecord({
     required this.id,
@@ -63,6 +81,38 @@ class GradeComponentRecord {
       'is_eliminatory': isEliminatory,
     };
   }
+}
+
+GradeComponentRecordType gradeComponentRecordTypeFromLabel(String label) {
+  return switch (label.trim().toLowerCase()) {
+    'curs' || 'examen' => GradeComponentRecordType.exam,
+    'seminar' => GradeComponentRecordType.seminar,
+    'laborator' => GradeComponentRecordType.laboratory,
+    'proiect' => GradeComponentRecordType.project,
+    'activitate pe parcurs' => GradeComponentRecordType.coursework,
+    _ => GradeComponentRecordType.other,
+  };
+}
+
+String canonicalGradeComponentName(String label) {
+  return switch (label.trim().toLowerCase()) {
+    'curs' || 'examen' => defaultGradeComponentName,
+    'seminar' => 'Seminar',
+    'laborator' => 'Laborator',
+    'proiect' => 'Proiect',
+    'activitate pe parcurs' => 'Activitate pe parcurs',
+    String value when value.isNotEmpty => label.trim(),
+    _ => fallbackGradeComponentName,
+  };
+}
+
+bool isEliminatoryGradeComponent(String label) {
+  return switch (gradeComponentRecordTypeFromLabel(label)) {
+    GradeComponentRecordType.seminar ||
+    GradeComponentRecordType.laboratory ||
+    GradeComponentRecordType.project => true,
+    _ => false,
+  };
 }
 
 GradeComponentRecordType _typeFromStorage(String value) {

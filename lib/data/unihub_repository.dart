@@ -824,17 +824,19 @@ class UniHubRepository {
             component.name: component,
         };
     byName.putIfAbsent(
-      'Examen',
+      defaultGradeComponentName,
       () => _defaultProfileComponent(
         subjectId: subject.id,
-        componentName: 'Examen',
+        componentName: defaultGradeComponentName,
       ),
     );
     for (final ClassSession session in sessions.where(
       (ClassSession session) => session.subjectId == subject.id,
     )) {
-      final String componentName = _canonicalComponentName(session.sessionType);
-      if (componentName.isEmpty || componentName == 'Alta componenta') {
+      final String componentName = canonicalGradeComponentName(
+        session.sessionType,
+      );
+      if (componentName == fallbackGradeComponentName) {
         continue;
       }
       byName.putIfAbsent(
@@ -856,12 +858,12 @@ class UniHubRepository {
       id: '',
       subjectId: subjectId,
       name: componentName,
-      type: _componentRecordTypeFromLabel(componentName),
+      type: gradeComponentRecordTypeFromLabel(componentName),
       weightPercent: 0,
       minimumGrade: 5,
       grade: null,
       isRequired: true,
-      isEliminatory: _isEliminatoryComponent(componentName),
+      isEliminatory: isEliminatoryGradeComponent(componentName),
     );
   }
 
@@ -873,45 +875,6 @@ class UniHubRepository {
       GradeComponentRecordType.project => GradeComponentType.project,
       GradeComponentRecordType.coursework => GradeComponentType.coursework,
       GradeComponentRecordType.other => GradeComponentType.other,
-    };
-  }
-
-  GradeComponentRecordType _componentRecordTypeFromLabel(String label) {
-    return switch (label.trim().toLowerCase()) {
-      'curs' || 'examen' => GradeComponentRecordType.exam,
-      'seminar' => GradeComponentRecordType.seminar,
-      'laborator' => GradeComponentRecordType.laboratory,
-      'proiect' => GradeComponentRecordType.project,
-      'activitate pe parcurs' => GradeComponentRecordType.coursework,
-      _ => GradeComponentRecordType.other,
-    };
-  }
-
-  GradeComponentType _componentTypeFromLabel(String label) {
-    return switch (label.trim().toLowerCase()) {
-      'curs' || 'examen' => GradeComponentType.exam,
-      'seminar' => GradeComponentType.seminar,
-      'laborator' => GradeComponentType.laboratory,
-      'proiect' => GradeComponentType.project,
-      'activitate pe parcurs' => GradeComponentType.coursework,
-      _ => GradeComponentType.other,
-    };
-  }
-
-  String _canonicalComponentName(String label) {
-    return switch (label.trim()) {
-      'Curs' => 'Examen',
-      String value when value.isNotEmpty => value,
-      _ => 'Alta componenta',
-    };
-  }
-
-  bool _isEliminatoryComponent(String label) {
-    return switch (_componentTypeFromLabel(label)) {
-      GradeComponentType.seminar ||
-      GradeComponentType.laboratory ||
-      GradeComponentType.project => true,
-      _ => false,
     };
   }
 

@@ -29,19 +29,6 @@ class GradesScreen extends StatefulWidget {
 class _GradesScreenState extends State<GradesScreen> {
   final UniHubRepository _repository = UniHubRepository.instance;
   static const String _allSubjectsValue = '__all__';
-  static const List<String> _gradeComponentOptions = <String>[
-    'Examen',
-    'Seminar',
-    'Laborator',
-    'Proiect',
-    'Activitate pe parcurs',
-    'Alta componenta',
-  ];
-  static const List<String> _weightedComponentOptions = <String>[
-    'Examen',
-    'Seminar',
-    'Laborator',
-  ];
 
   late Future<_GradesData> _gradesDataFuture;
   String _selectedSubject = _allSubjectsValue;
@@ -223,38 +210,6 @@ class _GradesScreenState extends State<GradesScreen> {
     };
   }
 
-  GradeComponentRecordType _componentRecordTypeFromLabel(String label) {
-    return switch (label.trim().toLowerCase()) {
-      'curs' || 'examen' => GradeComponentRecordType.exam,
-      'seminar' => GradeComponentRecordType.seminar,
-      'laborator' => GradeComponentRecordType.laboratory,
-      'proiect' => GradeComponentRecordType.project,
-      'activitate pe parcurs' => GradeComponentRecordType.coursework,
-      _ => GradeComponentRecordType.other,
-    };
-  }
-
-  String _canonicalComponentName(String label) {
-    return switch (label.trim().toLowerCase()) {
-      'curs' || 'examen' => 'Examen',
-      'seminar' => 'Seminar',
-      'laborator' => 'Laborator',
-      'proiect' => 'Proiect',
-      'activitate pe parcurs' => 'Activitate pe parcurs',
-      String value when value.isNotEmpty => label.trim(),
-      _ => 'Alta componenta',
-    };
-  }
-
-  bool _isEliminatoryComponent(String label) {
-    return switch (_componentRecordTypeFromLabel(label)) {
-      GradeComponentRecordType.seminar ||
-      GradeComponentRecordType.laboratory ||
-      GradeComponentRecordType.project => true,
-      _ => false,
-    };
-  }
-
   Future<void> _migrateLocalGradesIfNeeded() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     final String? raw = prefs.getString(_notesStorageKey());
@@ -295,7 +250,7 @@ class _GradesScreenState extends State<GradesScreen> {
         return;
       }
 
-      gradesByLegacyKey['$subjectName|${_canonicalComponentName(componentName)}'] =
+      gradesByLegacyKey['$subjectName|${canonicalGradeComponentName(componentName)}'] =
           parsedValue;
     });
 
@@ -353,15 +308,20 @@ class _GradesScreenState extends State<GradesScreen> {
         };
 
     byName.putIfAbsent(
-      'Examen',
-      () => _defaultComponent(subjectId: subject.id, componentName: 'Examen'),
+      defaultGradeComponentName,
+      () => _defaultComponent(
+        subjectId: subject.id,
+        componentName: defaultGradeComponentName,
+      ),
     );
 
     for (final ClassSession session in data.sessions.where(
       (ClassSession session) => session.subjectId == subject.id,
     )) {
-      final String componentName = _canonicalComponentName(session.sessionType);
-      if (componentName.isEmpty || componentName == 'Alta componenta') {
+      final String componentName = canonicalGradeComponentName(
+        session.sessionType,
+      );
+      if (componentName == fallbackGradeComponentName) {
         continue;
       }
       byName.putIfAbsent(
@@ -375,13 +335,13 @@ class _GradesScreenState extends State<GradesScreen> {
 
     return byName.values.toList(growable: false)
       ..sort((GradeComponentRecord a, GradeComponentRecord b) {
-        final int aIndex = _gradeComponentOptions.indexOf(a.name);
-        final int bIndex = _gradeComponentOptions.indexOf(b.name);
+        final int aIndex = gradeComponentLabels.indexOf(a.name);
+        final int bIndex = gradeComponentLabels.indexOf(b.name);
         final int normalizedA = aIndex == -1
-            ? _gradeComponentOptions.length
+            ? gradeComponentLabels.length
             : aIndex;
         final int normalizedB = bIndex == -1
-            ? _gradeComponentOptions.length
+            ? gradeComponentLabels.length
             : bIndex;
         return normalizedA.compareTo(normalizedB);
       });
@@ -392,7 +352,7 @@ class _GradesScreenState extends State<GradesScreen> {
     required _GradesData data,
     required String componentName,
   }) {
-    final String normalized = _canonicalComponentName(componentName);
+    final String normalized = canonicalGradeComponentName(componentName);
     return _recordsForSubject(subject: subject, data: data).firstWhere(
       (GradeComponentRecord component) => component.name == normalized,
       orElse: () =>
@@ -408,12 +368,12 @@ class _GradesScreenState extends State<GradesScreen> {
       id: '',
       subjectId: subjectId,
       name: componentName,
-      type: _componentRecordTypeFromLabel(componentName),
+      type: gradeComponentRecordTypeFromLabel(componentName),
       weightPercent: 0,
       minimumGrade: 5,
       grade: null,
       isRequired: true,
-      isEliminatory: _isEliminatoryComponent(componentName),
+      isEliminatory: isEliminatoryGradeComponent(componentName),
     );
   }
 
@@ -797,14 +757,14 @@ class _GradesScreenState extends State<GradesScreen> {
     final Set<String> activeComponents =
         _recordsForSubject(subject: subject, data: data)
             .map((GradeComponentRecord component) => component.name)
-            .where(_weightedComponentOptions.contains)
+            .where(weightedGradeComponentLabels.contains)
             .toSet();
 
     if (activeComponents.isEmpty) {
-      activeComponents.add('Examen');
+      activeComponents.add(defaultGradeComponentName);
     }
 
-    return _weightedComponentOptions
+    return weightedGradeComponentLabels
         .where(activeComponents.contains)
         .toList(growable: false);
   }
@@ -856,13 +816,13 @@ class _GradesScreenState extends State<GradesScreen> {
             })
             .toList(growable: false)
           ..sort((GradeComponent a, GradeComponent b) {
-            final int aIndex = _gradeComponentOptions.indexOf(a.name);
-            final int bIndex = _gradeComponentOptions.indexOf(b.name);
+            final int aIndex = gradeComponentLabels.indexOf(a.name);
+            final int bIndex = gradeComponentLabels.indexOf(b.name);
             final int normalizedA = aIndex == -1
-                ? _gradeComponentOptions.length
+                ? gradeComponentLabels.length
                 : aIndex;
             final int normalizedB = bIndex == -1
-                ? _gradeComponentOptions.length
+                ? gradeComponentLabels.length
                 : bIndex;
             return normalizedA.compareTo(normalizedB);
           });

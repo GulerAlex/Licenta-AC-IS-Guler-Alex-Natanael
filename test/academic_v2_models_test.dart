@@ -86,6 +86,18 @@ void main() {
     expect(component.type, GradeComponentRecordType.exam);
   });
 
+  test('Grade component helpers normalize labels consistently', () {
+    expect(canonicalGradeComponentName('curs'), defaultGradeComponentName);
+    expect(canonicalGradeComponentName(' seminar '), 'Seminar');
+    expect(canonicalGradeComponentName(''), fallbackGradeComponentName);
+    expect(
+      gradeComponentRecordTypeFromLabel('laborator'),
+      GradeComponentRecordType.laboratory,
+    );
+    expect(isEliminatoryGradeComponent('Laborator'), isTrue);
+    expect(isEliminatoryGradeComponent('Examen'), isFalse);
+  });
+
   test('StudyTask converts in_progress status both ways', () {
     final StudyTask task = StudyTask.fromMap(<String, dynamic>{
       'id': 'task-1',
