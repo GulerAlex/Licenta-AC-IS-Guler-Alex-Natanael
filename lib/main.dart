@@ -1,8 +1,9 @@
 import 'dart:async';
 
-import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:unihub/data/app_preferences_store.dart';
 import 'package:unihub/data/unihub_repository.dart';
@@ -21,7 +22,9 @@ import 'package:unihub/supabase/supabase_config.dart';
 import 'package:persistent_bottom_nav_bar/persistent_bottom_nav_bar.dart';
 
 void _authLog(String message) {
-  debugPrint('[AUTH_DEBUG] $message');
+  if (kDebugMode) {
+    debugPrint('[AUTH] $message');
+  }
 }
 
 Future<void> main() async {
@@ -100,7 +103,7 @@ class _SupabaseInitErrorApp extends StatelessWidget {
           child: Padding(
             padding: EdgeInsets.all(24),
             child: Text(
-              'Supabase nu a putut fi initializat. Verifica logurile din consola pentru [AUTH_DEBUG].',
+              'Nu am putut porni conexiunea cu serverul. Verifica internetul si redeschide aplicatia.',
               textAlign: TextAlign.center,
             ),
           ),
@@ -362,6 +365,10 @@ class _AuthGatewayState extends State<AuthGateway> {
   }
 
   Future<void> _logNetworkProbe(String source) async {
+    if (!kDebugMode) {
+      return;
+    }
+
     final String host = Uri.parse(SupabaseConfig.url).host;
     _authLog('Network probe[$source] started for host=$host');
 
