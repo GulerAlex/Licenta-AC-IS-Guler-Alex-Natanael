@@ -16,7 +16,6 @@ class ProfileScreenView extends StatefulWidget {
     required this.isLoggingOut,
     required this.isUpdatingProfile,
     required this.isUpdatingGroup,
-    required this.isMigratingAcademicData,
     required this.themePreference,
     required this.avatarColor,
     required this.onRefresh,
@@ -26,7 +25,6 @@ class ProfileScreenView extends StatefulWidget {
     required this.onThemePreferenceChanged,
     required this.onAvatarColorChanged,
     required this.onExportAcademicData,
-    required this.onMigrateAcademicData,
   });
 
   final UserProfile profile;
@@ -38,7 +36,6 @@ class ProfileScreenView extends StatefulWidget {
   final bool isLoggingOut;
   final bool isUpdatingProfile;
   final bool isUpdatingGroup;
-  final bool isMigratingAcademicData;
   final AppThemePreference themePreference;
   final Color avatarColor;
   final Future<void> Function() onRefresh;
@@ -48,7 +45,6 @@ class ProfileScreenView extends StatefulWidget {
   final ValueChanged<AppThemePreference> onThemePreferenceChanged;
   final ValueChanged<Color> onAvatarColorChanged;
   final Future<void> Function() onExportAcademicData;
-  final Future<void> Function() onMigrateAcademicData;
 
   @override
   State<ProfileScreenView> createState() => _ProfileScreenViewState();
@@ -832,27 +828,6 @@ class _ProfileScreenViewState extends State<ProfileScreenView> {
               'Exporta date CSV',
               style: TextStyle(
                 color: colors.primary,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: widget.isMigratingAcademicData
-                ? null
-                : widget.onMigrateAcademicData,
-            icon: Icon(Icons.sync_alt_rounded, color: colors.primary),
-            label: Text(
-              widget.isMigratingAcademicData
-                  ? 'Se migreaza datele...'
-                  : 'Migreaza datele pentru Astazi',
-              style: TextStyle(
-                color: widget.isMigratingAcademicData
-                    ? colors.onSurfaceVariant
-                    : colors.primary,
                 fontWeight: FontWeight.w700,
               ),
             ),

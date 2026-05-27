@@ -114,18 +114,18 @@ class _GradesScreenViewState extends State<GradesScreenView> {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                colors.primary.withOpacity(0.2),
-                colors.secondary.withOpacity(0.1),
+                colors.primary.withValues(alpha: 0.2),
+                colors.secondary.withValues(alpha: 0.1),
               ],
             ),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: colors.primary.withOpacity(0.3),
+              color: colors.primary.withValues(alpha: 0.3),
               width: 1.5,
             ),
             boxShadow: [
               BoxShadow(
-                color: colors.primary.withOpacity(0.15),
+                color: colors.primary.withValues(alpha: 0.15),
                 blurRadius: 20,
                 offset: const Offset(0, 10),
                 spreadRadius: 2,
@@ -203,13 +203,13 @@ class _GradesScreenViewState extends State<GradesScreenView> {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                colors.secondary.withOpacity(0.15),
-                colors.tertiary.withOpacity(0.1),
+                colors.secondary.withValues(alpha: 0.15),
+                colors.tertiary.withValues(alpha: 0.1),
               ],
             ),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: colors.secondary.withOpacity(0.25),
+              color: colors.secondary.withValues(alpha: 0.25),
               width: 1.5,
             ),
           ),
@@ -353,18 +353,20 @@ class _SubjectNoteCardState extends State<_SubjectNoteCard> {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  colors.primary.withOpacity(0.12),
-                  colors.secondary.withOpacity(0.08),
+                  colors.primary.withValues(alpha: 0.12),
+                  colors.secondary.withValues(alpha: 0.08),
                 ],
               ),
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
-                color: colors.primary.withOpacity(0.2),
+                color: colors.primary.withValues(alpha: 0.2),
                 width: 1.5,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: colors.primary.withOpacity(_isHovered ? 0.25 : 0.12),
+                  color: colors.primary.withValues(
+                    alpha: _isHovered ? 0.25 : 0.12,
+                  ),
                   blurRadius: _isHovered ? 20 : 10,
                   offset: Offset(0, _isHovered ? 12 : 6),
                   spreadRadius: _isHovered ? 2 : 0,
@@ -445,7 +447,7 @@ class _SubjectNoteCardState extends State<_SubjectNoteCard> {
                     ],
                   ),
                   const SizedBox(height: 10),
-                  // Course types
+                  // Grade components
                   ...subject.components.map(
                     (GradeComponent component) => Padding(
                       padding: const EdgeInsets.only(bottom: 8),
@@ -462,9 +464,9 @@ class _SubjectNoteCardState extends State<_SubjectNoteCard> {
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          colors.primary.withOpacity(0.1),
-                          colors.primary.withOpacity(0.3),
-                          colors.primary.withOpacity(0.1),
+                          colors.primary.withValues(alpha: 0.1),
+                          colors.primary.withValues(alpha: 0.3),
+                          colors.primary.withValues(alpha: 0.1),
                         ],
                       ),
                     ),
@@ -527,13 +529,13 @@ class _TypeGradeTile extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              colors.secondary.withOpacity(0.15),
-              colors.tertiary.withOpacity(0.1),
+              colors.secondary.withValues(alpha: 0.15),
+              colors.tertiary.withValues(alpha: 0.1),
             ],
           ),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: colors.secondary.withOpacity(0.2),
+            color: colors.secondary.withValues(alpha: 0.2),
             width: 1,
           ),
         ),
@@ -542,7 +544,7 @@ class _TypeGradeTile extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: colors.secondary.withOpacity(0.25),
+                color: colors.secondary.withValues(alpha: 0.25),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
@@ -586,9 +588,9 @@ class _SummaryMetric extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: colors.surface.withOpacity(0.32),
+        color: colors.surface.withValues(alpha: 0.32),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: colors.primary.withOpacity(0.16)),
+        border: Border.all(color: colors.primary.withValues(alpha: 0.16)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -639,9 +641,9 @@ class _StatusChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.16),
+        color: color.withValues(alpha: 0.16),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
         label,
@@ -674,9 +676,9 @@ class _StatusReasonBox extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.24)),
+        border: Border.all(color: color.withValues(alpha: 0.24)),
       ),
       child: Text(
         message,

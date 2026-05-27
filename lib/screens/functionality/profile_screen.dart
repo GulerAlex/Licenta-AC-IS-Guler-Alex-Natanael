@@ -9,7 +9,6 @@ import 'package:unihub/models/grade_component_record.dart';
 import 'package:unihub/models/profile_stats.dart';
 import 'package:unihub/models/user_profile.dart';
 import 'package:unihub/screens/ui/profile_screen_view.dart';
-import 'package:unihub/services/academic_data_migration_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
@@ -33,15 +32,12 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final UniHubRepository _repository = UniHubRepository.instance;
-  final AcademicDataMigrationService _migrationService =
-      AcademicDataMigrationService();
   late Future<UserProfile> _profileFuture;
   late Future<ProfileStats> _statsFuture;
   late Future<Map<String, ProfileStats>> _semesterStatsFuture;
   bool _isLoggingOut = false;
   bool _isUpdatingProfile = false;
   bool _isUpdatingGroup = false;
-  bool _isMigratingAcademicData = false;
 
   @override
   void initState() {
@@ -387,76 +383,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _migrateAcademicDataToV2() async {
-    if (_isMigratingAcademicData) {
-      return;
-    }
-
-    final bool shouldMigrate =
-        await showDialog<bool>(
-          context: context,
-          builder: (BuildContext dialogContext) {
-            return AlertDialog(
-              title: const Text('Migreaza datele academice'),
-              content: const Text(
-                'Aceasta actiune copiaza orarul, examenele si notele in schema noua folosita de pagina Astazi. Ruleaza intai supabase_academic_schema_v2.sql in Supabase.',
-              ),
-              actions: <Widget>[
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('Renunta'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(true),
-                  child: const Text('Migreaza'),
-                ),
-              ],
-            );
-          },
-        ) ??
-        false;
-
-    if (!mounted || !shouldMigrate) {
-      return;
-    }
-
-    setState(() {
-      _isMigratingAcademicData = true;
-    });
-
-    try {
-      final AcademicDataMigrationResult result = await _migrationService
-          .migrateLegacyDataToV2();
-      if (!mounted) {
-        return;
-      }
-      _showSnackBarAfterBuild(
-        SnackBar(
-          content: Text(
-            'Migrare finalizata: ${result.subjectsCreatedOrUpdated} materii, ${result.classSessionsCreated} sesiuni, ${result.academicEventsCreated} evenimente.',
-          ),
-        ),
-      );
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      _showSnackBarAfterBuild(
-        const SnackBar(
-          content: Text(
-            'Migrarea a esuat. Verifica daca schema v2 exista in Supabase.',
-          ),
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isMigratingAcademicData = false;
-        });
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<UserProfile>(
@@ -493,7 +419,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       isLoggingOut: _isLoggingOut,
                       isUpdatingProfile: _isUpdatingProfile,
                       isUpdatingGroup: _isUpdatingGroup,
-                      isMigratingAcademicData: _isMigratingAcademicData,
                       themePreference: widget.themePreference,
                       avatarColor: widget.avatarColor,
                       onRefresh: _reload,
@@ -505,7 +430,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       onThemePreferenceChanged: widget.onThemePreferenceChanged,
                       onAvatarColorChanged: widget.onAvatarColorChanged,
                       onExportAcademicData: _exportAcademicData,
-                      onMigrateAcademicData: _migrateAcademicDataToV2,
                     );
                   },
             );
