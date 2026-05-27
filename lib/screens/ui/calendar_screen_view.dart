@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:ui' as ui;
-import 'package:unihub/models/course.dart';
+import 'package:unihub/models/subject_schedule_entry.dart';
 
 class CalendarScreenView extends StatefulWidget {
   const CalendarScreenView({
@@ -35,9 +35,9 @@ class CalendarScreenView extends StatefulWidget {
   final Future<void> Function() onAddCourse;
   final Future<void> Function() onDeleteCourse;
   final ValueChanged<String> onSubjectTap;
-  final Future<void> Function(String subjectName, Course course)
+  final Future<void> Function(String subjectName, SubjectScheduleEntry entry)
   onEditCourseType;
-  final Future<void> Function(String subjectName, Course course)
+  final Future<void> Function(String subjectName, SubjectScheduleEntry entry)
   onDeleteCourseType;
   final bool isAddingCourse;
   final bool isDeletingCourse;
@@ -47,7 +47,7 @@ class CalendarScreenView extends StatefulWidget {
   final Future<void> Function() onRefresh;
   final ConnectionState connectionState;
   final bool hasError;
-  final List<MapEntry<String, List<Course>>> subjectEntries;
+  final List<MapEntry<String, List<SubjectScheduleEntry>>> subjectEntries;
   final VoidCallback onRetry;
 
   @override
@@ -99,16 +99,17 @@ class _CalendarScreenViewState extends State<CalendarScreenView> {
                 )
               else
                 ...widget.subjectEntries.map(
-                  (MapEntry<String, List<Course>> entry) => _SubjectCard(
-                    subjectName: entry.key,
-                    courses: entry.value,
-                    pendingTimeLabel: widget.pendingTimeLabel,
-                    onTap: () => widget.onSubjectTap(entry.key),
-                    onEditCourseType: widget.onEditCourseType,
-                    onDeleteCourseType: widget.onDeleteCourseType,
-                    isEditingCourseType: widget.isEditingCourseType,
-                    isDeletingCourseType: widget.isDeletingCourseType,
-                  ),
+                  (MapEntry<String, List<SubjectScheduleEntry>> entry) =>
+                      _SubjectCard(
+                        subjectName: entry.key,
+                        courses: entry.value,
+                        pendingTimeLabel: widget.pendingTimeLabel,
+                        onTap: () => widget.onSubjectTap(entry.key),
+                        onEditCourseType: widget.onEditCourseType,
+                        onDeleteCourseType: widget.onDeleteCourseType,
+                        isEditingCourseType: widget.isEditingCourseType,
+                        isDeletingCourseType: widget.isDeletingCourseType,
+                      ),
                 ),
             ],
           ),
@@ -375,12 +376,12 @@ class _SubjectCard extends StatefulWidget {
   });
 
   final String subjectName;
-  final List<Course> courses;
+  final List<SubjectScheduleEntry> courses;
   final String pendingTimeLabel;
   final VoidCallback onTap;
-  final Future<void> Function(String subjectName, Course course)
+  final Future<void> Function(String subjectName, SubjectScheduleEntry entry)
   onEditCourseType;
-  final Future<void> Function(String subjectName, Course course)
+  final Future<void> Function(String subjectName, SubjectScheduleEntry entry)
   onDeleteCourseType;
   final bool isEditingCourseType;
   final bool isDeletingCourseType;
@@ -395,8 +396,11 @@ class _SubjectCardState extends State<_SubjectCard> {
   @override
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
-    final List<Course> detailedCourses = widget.courses
-        .where((Course course) => course.time != widget.pendingTimeLabel)
+    final List<SubjectScheduleEntry> detailedCourses = widget.courses
+        .where(
+          (SubjectScheduleEntry course) =>
+              course.time != widget.pendingTimeLabel,
+        )
         .toList(growable: false);
     final int subjectCredits = widget.courses.isNotEmpty
         ? widget.courses.first.credits
@@ -499,7 +503,7 @@ class _SubjectCardState extends State<_SubjectCard> {
                           )
                         else
                           ...detailedCourses.map(
-                            (Course course) => Padding(
+                            (SubjectScheduleEntry course) => Padding(
                               padding: const EdgeInsets.only(bottom: 10),
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -519,7 +523,7 @@ class _SubjectCardState extends State<_SubjectCard> {
                                       borderRadius: BorderRadius.circular(6),
                                     ),
                                     child: Text(
-                                      course.courseType,
+                                      course.sessionType,
                                       style: Theme.of(context)
                                           .textTheme
                                           .labelSmall

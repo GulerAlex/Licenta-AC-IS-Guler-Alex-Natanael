@@ -7,7 +7,7 @@ import 'package:unihub/data/schedule_visibility_store.dart';
 import 'package:unihub/data/unihub_repository.dart';
 import 'package:unihub/models/academic_subject_v2.dart';
 import 'package:unihub/models/class_session.dart';
-import 'package:unihub/models/course.dart';
+import 'package:unihub/models/subject_schedule_entry.dart';
 import 'package:unihub/screens/ui/calendar_screen_view.dart';
 
 class CalendarScreen extends StatefulWidget {
@@ -37,7 +37,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   ];
 
   String _selectedSemester = 'Semestrul 2';
-  late Future<List<Course>> _coursesFuture;
+  late Future<List<SubjectScheduleEntry>> _scheduleEntriesFuture;
   bool _isAddingCourse = false;
   bool _isDeletingCourse = false;
   bool _isDeletingCourseType = false;
@@ -49,7 +49,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   @override
   void initState() {
     super.initState();
-    _coursesFuture = _loadCoursesForSemester(_selectedSemester);
+    _scheduleEntriesFuture = _loadEntriesForSemester(_selectedSemester);
     unawaited(_loadScheduleVisibility());
     _subscribeToAcademicScheduleRealtime();
   }
@@ -85,7 +85,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
               return;
             }
             setState(() {
-              _coursesFuture = _loadCoursesForSemester(_selectedSemester);
+              _scheduleEntriesFuture = _loadEntriesForSemester(
+                _selectedSemester,
+              );
             });
           },
         )
@@ -103,7 +105,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
               return;
             }
             setState(() {
-              _coursesFuture = _loadCoursesForSemester(_selectedSemester);
+              _scheduleEntriesFuture = _loadEntriesForSemester(
+                _selectedSemester,
+              );
             });
           },
         )
@@ -112,12 +116,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
     _academicScheduleRealtimeChannel = channel;
   }
 
-  Future<List<Course>> _loadCoursesForSemester(String semesterLabel) async {
+  Future<List<SubjectScheduleEntry>> _loadEntriesForSemester(
+    String semesterLabel,
+  ) async {
     final List<AcademicSubjectV2> subjects = await _repository
         .fetchSubjectsV2();
     final List<ClassSession> sessions = await _repository
         .fetchClassSessionsV2();
-    final List<Course> courses = <Course>[];
+    final List<SubjectScheduleEntry> entries = <SubjectScheduleEntry>[];
 
     for (final AcademicSubjectV2 subject in subjects.where(
       (AcademicSubjectV2 subject) =>
@@ -127,40 +133,44 @@ class _CalendarScreenState extends State<CalendarScreen> {
           .where((ClassSession session) => session.subjectId == subject.id)
           .toList(growable: false);
       if (subjectSessions.isEmpty) {
-        courses.add(_pendingCourseFromSubject(subject));
+        entries.add(_pendingEntryFromSubject(subject));
         continue;
       }
-      courses.addAll(
+      entries.addAll(
         subjectSessions.map(
-          (ClassSession session) => _courseFromSession(subject, session),
+          (ClassSession session) => _entryFromSession(subject, session),
         ),
       );
     }
 
-    return courses;
+    return entries;
   }
 
-  Course _pendingCourseFromSubject(AcademicSubjectV2 subject) {
-    return Course(
+  SubjectScheduleEntry _pendingEntryFromSubject(AcademicSubjectV2 subject) {
+    return SubjectScheduleEntry(
       name: subject.name,
       semesterLabel: subject.semesterLabel,
       credits: subject.credits,
-      courseType: 'Curs',
+      sessionType: 'Curs',
       weekdayLabel: _weekdayOptions.first,
       time: UniHubRepository.pendingCourseTimeLabel,
       room: '',
       professor: subject.professor,
       sortOrder: 0,
       subjectId: subject.id,
+      sessionId: '',
     );
   }
 
-  Course _courseFromSession(AcademicSubjectV2 subject, ClassSession session) {
-    return Course(
+  SubjectScheduleEntry _entryFromSession(
+    AcademicSubjectV2 subject,
+    ClassSession session,
+  ) {
+    return SubjectScheduleEntry(
       name: subject.name,
       semesterLabel: subject.semesterLabel,
       credits: subject.credits,
-      courseType: session.sessionType,
+      sessionType: session.sessionType,
       weekdayLabel: _weekdayLabelFromNumber(session.weekday),
       time: session.intervalLabel,
       room: session.room,
@@ -232,7 +242,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   ClassSession _classSessionFromCourse({
-    required Course course,
+    required SubjectScheduleEntry course,
     required String subjectId,
     required String sessionId,
   }) {
@@ -246,7 +256,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return ClassSession(
       id: sessionId,
       subjectId: subjectId,
-      sessionType: course.courseType,
+      sessionType: course.sessionType,
       weekday: _weekdayNumberFromLabel(course.weekdayLabel),
       startsAtMinutes: startsAtMinutes,
       endsAtMinutes: normalizedEndsAtMinutes,
@@ -314,9 +324,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   Future<void> _reload() async {
     setState(() {
-      _coursesFuture = _loadCoursesForSemester(_selectedSemester);
+      _scheduleEntriesFuture = _loadEntriesForSemester(_selectedSemester);
     });
-    await _coursesFuture;
+    await _scheduleEntriesFuture;
   }
 
   Future<void> _changeSemester(String semesterLabel) async {
@@ -326,7 +336,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
     setState(() {
       _selectedSemester = semesterLabel;
-      _coursesFuture = _loadCoursesForSemester(_selectedSemester);
+      _scheduleEntriesFuture = _loadEntriesForSemester(_selectedSemester);
     });
   }
 
@@ -343,7 +353,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return (hour * 60) + minute;
   }
 
-  bool _isPendingCourse(Course course) {
+  bool _isPendingCourse(SubjectScheduleEntry course) {
     return course.time == UniHubRepository.pendingCourseTimeLabel;
   }
 
@@ -420,7 +430,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
       setState(() {
         _selectedSemester = newSubject.semesterLabel;
-        _coursesFuture = _loadCoursesForSemester(_selectedSemester);
+        _scheduleEntriesFuture = _loadEntriesForSemester(_selectedSemester);
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -463,19 +473,20 @@ class _CalendarScreenState extends State<CalendarScreen> {
       return;
     }
 
-    final Course? detailedCourse = await showDialog<Course>(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        return _AddCourseDetailsDialog(
-          subjectName: subjectName,
-          semesterLabel: _selectedSemester,
-          subjectCredits: subject.credits,
-          weekdayOptions: _weekdayOptions,
-          courseTypeOptions: _courseTypeOptions,
-          sortOrderFromTime: _sortOrderFromTime,
+    final SubjectScheduleEntry? detailedCourse =
+        await showDialog<SubjectScheduleEntry>(
+          context: context,
+          builder: (BuildContext dialogContext) {
+            return _AddCourseDetailsDialog(
+              subjectName: subjectName,
+              semesterLabel: _selectedSemester,
+              subjectCredits: subject.credits,
+              weekdayOptions: _weekdayOptions,
+              courseTypeOptions: _courseTypeOptions,
+              sortOrderFromTime: _sortOrderFromTime,
+            );
+          },
         );
-      },
-    );
 
     if (!mounted || detailedCourse == null) {
       return;
@@ -495,7 +506,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       }
 
       setState(() {
-        _coursesFuture = _loadCoursesForSemester(_selectedSemester);
+        _scheduleEntriesFuture = _loadEntriesForSemester(_selectedSemester);
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -516,13 +527,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
       return;
     }
 
-    final List<Course> semesterCourses = await _loadCoursesForSemester(
-      _selectedSemester,
-    );
+    final List<SubjectScheduleEntry> semesterCourses =
+        await _loadEntriesForSemester(_selectedSemester);
 
     final List<String> subjects =
         semesterCourses
-            .map((Course course) => course.name.trim())
+            .map((SubjectScheduleEntry course) => course.name.trim())
             .where((String name) => name.isNotEmpty)
             .toSet()
             .toList(growable: false)
@@ -573,7 +583,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       }
 
       setState(() {
-        _coursesFuture = _loadCoursesForSemester(_selectedSemester);
+        _scheduleEntriesFuture = _loadEntriesForSemester(_selectedSemester);
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -597,7 +607,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
   }
 
-  Future<void> _deleteCourseType(String subjectName, Course course) async {
+  Future<void> _deleteCourseType(
+    String subjectName,
+    SubjectScheduleEntry course,
+  ) async {
     if (_isDeletingCourseType) {
       return;
     }
@@ -609,7 +622,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             return AlertDialog(
               title: const Text('Sterge tipul de curs'),
               content: Text(
-                'Stergi ${course.courseType} (${course.weekdayLabel}, ${course.time}) de la materia $subjectName?',
+                'Stergi ${course.sessionType} (${course.weekdayLabel}, ${course.time}) de la materia $subjectName?',
               ),
               actions: <Widget>[
                 TextButton(
@@ -645,7 +658,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       }
 
       setState(() {
-        _coursesFuture = _loadCoursesForSemester(_selectedSemester);
+        _scheduleEntriesFuture = _loadEntriesForSemester(_selectedSemester);
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -667,26 +680,30 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
   }
 
-  Future<void> _editCourseType(String subjectName, Course course) async {
+  Future<void> _editCourseType(
+    String subjectName,
+    SubjectScheduleEntry course,
+  ) async {
     if (_isEditingCourseType) {
       return;
     }
 
-    final Course? updatedCourse = await showDialog<Course>(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        return _AddCourseDetailsDialog(
-          subjectName: subjectName,
-          semesterLabel: _selectedSemester,
-          subjectCredits: course.credits,
-          weekdayOptions: _weekdayOptions,
-          courseTypeOptions: _courseTypeOptions,
-          sortOrderFromTime: _sortOrderFromTime,
-          initialCourse: course,
-          submitButtonLabel: 'Salveaza modificarile',
+    final SubjectScheduleEntry? updatedCourse =
+        await showDialog<SubjectScheduleEntry>(
+          context: context,
+          builder: (BuildContext dialogContext) {
+            return _AddCourseDetailsDialog(
+              subjectName: subjectName,
+              semesterLabel: _selectedSemester,
+              subjectCredits: course.credits,
+              weekdayOptions: _weekdayOptions,
+              courseTypeOptions: _courseTypeOptions,
+              sortOrderFromTime: _sortOrderFromTime,
+              initialCourse: course,
+              submitButtonLabel: 'Salveaza modificarile',
+            );
+          },
         );
-      },
-    );
 
     if (!mounted || updatedCourse == null) {
       return;
@@ -717,7 +734,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       }
 
       setState(() {
-        _coursesFuture = _loadCoursesForSemester(_selectedSemester);
+        _scheduleEntriesFuture = _loadEntriesForSemester(_selectedSemester);
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -750,58 +767,70 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<Course>>(
-      future: _coursesFuture,
-      builder: (BuildContext context, AsyncSnapshot<List<Course>> snapshot) {
-        final List<Course> courses = snapshot.data ?? <Course>[];
-        final Map<String, List<Course>> groupedCourses =
-            <String, List<Course>>{};
+    return FutureBuilder<List<SubjectScheduleEntry>>(
+      future: _scheduleEntriesFuture,
+      builder:
+          (
+            BuildContext context,
+            AsyncSnapshot<List<SubjectScheduleEntry>> snapshot,
+          ) {
+            final List<SubjectScheduleEntry> courses =
+                snapshot.data ?? <SubjectScheduleEntry>[];
+            final Map<String, List<SubjectScheduleEntry>> groupedCourses =
+                <String, List<SubjectScheduleEntry>>{};
 
-        for (final Course course in courses) {
-          groupedCourses.putIfAbsent(course.name, () => <Course>[]).add(course);
-        }
-
-        for (final List<Course> subjectCourses in groupedCourses.values) {
-          subjectCourses.sort((Course a, Course b) {
-            final bool aPending = _isPendingCourse(a);
-            final bool bPending = _isPendingCourse(b);
-            if (aPending != bPending) {
-              return aPending ? 1 : -1;
+            for (final SubjectScheduleEntry course in courses) {
+              groupedCourses
+                  .putIfAbsent(course.name, () => <SubjectScheduleEntry>[])
+                  .add(course);
             }
 
-            if (a.sortOrder != b.sortOrder) {
-              return a.sortOrder.compareTo(b.sortOrder);
-            }
-            return _courseTypeOrder(
-              a.courseType,
-            ).compareTo(_courseTypeOrder(b.courseType));
-          });
-        }
+            for (final List<SubjectScheduleEntry> subjectCourses
+                in groupedCourses.values) {
+              subjectCourses.sort((
+                SubjectScheduleEntry a,
+                SubjectScheduleEntry b,
+              ) {
+                final bool aPending = _isPendingCourse(a);
+                final bool bPending = _isPendingCourse(b);
+                if (aPending != bPending) {
+                  return aPending ? 1 : -1;
+                }
 
-        return CalendarScreenView(
-          selectedSemester: _selectedSemester,
-          isSelectedSemesterVisibleInSchedule: !_hiddenScheduleSemesters
-              .contains(_selectedSemester),
-          isUpdatingSemesterVisibility: _isUpdatingSemesterVisibility,
-          onSemesterChanged: _changeSemester,
-          onScheduleVisibilityChanged: _setSelectedSemesterScheduleVisibility,
-          onAddCourse: _openAddCourseDialog,
-          onDeleteCourse: _openDeleteCourseDialog,
-          onSubjectTap: _openAddDetailsDialog,
-          onEditCourseType: _editCourseType,
-          onDeleteCourseType: _deleteCourseType,
-          isAddingCourse: _isAddingCourse,
-          isDeletingCourse: _isDeletingCourse,
-          isEditingCourseType: _isEditingCourseType,
-          isDeletingCourseType: _isDeletingCourseType,
-          pendingTimeLabel: UniHubRepository.pendingCourseTimeLabel,
-          onRefresh: _reload,
-          connectionState: snapshot.connectionState,
-          hasError: snapshot.hasError,
-          subjectEntries: groupedCourses.entries.toList(growable: false),
-          onRetry: _reload,
-        );
-      },
+                if (a.sortOrder != b.sortOrder) {
+                  return a.sortOrder.compareTo(b.sortOrder);
+                }
+                return _courseTypeOrder(
+                  a.sessionType,
+                ).compareTo(_courseTypeOrder(b.sessionType));
+              });
+            }
+
+            return CalendarScreenView(
+              selectedSemester: _selectedSemester,
+              isSelectedSemesterVisibleInSchedule: !_hiddenScheduleSemesters
+                  .contains(_selectedSemester),
+              isUpdatingSemesterVisibility: _isUpdatingSemesterVisibility,
+              onSemesterChanged: _changeSemester,
+              onScheduleVisibilityChanged:
+                  _setSelectedSemesterScheduleVisibility,
+              onAddCourse: _openAddCourseDialog,
+              onDeleteCourse: _openDeleteCourseDialog,
+              onSubjectTap: _openAddDetailsDialog,
+              onEditCourseType: _editCourseType,
+              onDeleteCourseType: _deleteCourseType,
+              isAddingCourse: _isAddingCourse,
+              isDeletingCourse: _isDeletingCourse,
+              isEditingCourseType: _isEditingCourseType,
+              isDeletingCourseType: _isDeletingCourseType,
+              pendingTimeLabel: UniHubRepository.pendingCourseTimeLabel,
+              onRefresh: _reload,
+              connectionState: snapshot.connectionState,
+              hasError: snapshot.hasError,
+              subjectEntries: groupedCourses.entries.toList(growable: false),
+              onRetry: _reload,
+            );
+          },
     );
   }
 }
@@ -962,7 +991,7 @@ class _AddCourseDetailsDialog extends StatefulWidget {
   final List<String> weekdayOptions;
   final List<String> courseTypeOptions;
   final int Function(String value) sortOrderFromTime;
-  final Course? initialCourse;
+  final SubjectScheduleEntry? initialCourse;
   final String submitButtonLabel;
 
   @override
@@ -983,11 +1012,11 @@ class _AddCourseDetailsDialogState extends State<_AddCourseDetailsDialog> {
   @override
   void initState() {
     super.initState();
-    final Course? initialCourse = widget.initialCourse;
+    final SubjectScheduleEntry? initialCourse = widget.initialCourse;
     _selectedWeekday =
         initialCourse?.weekdayLabel ?? widget.weekdayOptions.first;
     _selectedCourseType =
-        initialCourse?.courseType ?? widget.courseTypeOptions.first;
+        initialCourse?.sessionType ?? widget.courseTypeOptions.first;
     _roomController.text = initialCourse?.room ?? '';
     _professorController.text = initialCourse?.professor ?? '';
 
@@ -1270,11 +1299,11 @@ class _AddCourseDetailsDialogState extends State<_AddCourseDetailsDialog> {
     final String intervalLabel =
         '${_formatMinutes(startMinutes)} - ${_formatMinutes(endMinutes)}';
 
-    final Course course = Course(
+    final SubjectScheduleEntry course = SubjectScheduleEntry(
       name: widget.subjectName,
       semesterLabel: widget.semesterLabel,
       credits: widget.initialCourse?.credits ?? widget.subjectCredits,
-      courseType: _selectedCourseType,
+      sessionType: _selectedCourseType,
       weekdayLabel: _selectedWeekday,
       time: intervalLabel,
       room: _roomController.text.trim(),
@@ -1284,7 +1313,7 @@ class _AddCourseDetailsDialogState extends State<_AddCourseDetailsDialog> {
       sessionId: widget.initialCourse?.sessionId ?? '',
     );
 
-    Navigator.of(context).pop<Course>(course);
+    Navigator.of(context).pop<SubjectScheduleEntry>(course);
   }
 
   @override

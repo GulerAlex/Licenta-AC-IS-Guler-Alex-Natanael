@@ -72,6 +72,8 @@ class NotificationService {
     return androidGranted ?? iosGranted ?? true;
   }
 
+  // Legacy reminder API kept for backwards-compatible migration/debug paths.
+  // Normal screens schedule notifications through rescheduleAcademicRemindersV2.
   Future<void> rescheduleAcademicReminders({
     required List<Course> courses,
     required List<ExamEvent> exams,

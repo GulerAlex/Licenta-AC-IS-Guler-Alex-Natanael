@@ -37,6 +37,8 @@ class UniHubRepository {
     coursesVersion.value += 1;
   }
 
+  // Legacy academic API kept only for one-time migration from the old schema.
+  // New app flows should use subjects/class_sessions/academic_events/grade_components.
   Future<List<Course>> fetchCourses({required String semesterLabel}) async {
     if (!availableSemesters.contains(semesterLabel)) {
       throw ArgumentError.value(
