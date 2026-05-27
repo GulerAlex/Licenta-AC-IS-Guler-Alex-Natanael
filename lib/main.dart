@@ -8,12 +8,12 @@ import 'package:unihub/data/app_preferences_store.dart';
 import 'package:unihub/data/unihub_repository.dart';
 import 'package:unihub/models/user_profile.dart';
 import 'package:unihub/screens/functionality/academic_setup_screen.dart';
-import 'package:unihub/screens/functionality/calendar_screen.dart';
 import 'package:unihub/screens/functionality/grades_screen.dart';
 import 'package:unihub/screens/functionality/login_screen.dart';
 import 'package:unihub/screens/functionality/profile_screen.dart';
 import 'package:unihub/screens/functionality/schedule_screen.dart';
 import 'package:unihub/screens/functionality/signup_screen.dart';
+import 'package:unihub/screens/functionality/subjects_screen.dart';
 import 'package:unihub/screens/functionality/today_screen.dart';
 import 'package:unihub/screens/ui/noise_overlay.dart';
 import 'package:unihub/services/notification_service.dart';
@@ -564,7 +564,7 @@ class _UniHubHomePageState extends State<UniHubHomePage> {
   List<Widget> get _screens => <Widget>[
     const TodayScreen(),
     const ScheduleScreen(),
-    const CalendarScreen(),
+    const SubjectsScreen(),
     GradesScreen(
       academicDataVersion: _academicDataVersion,
       isActive: _controller.index == 3,

@@ -8,16 +8,16 @@ import 'package:unihub/data/unihub_repository.dart';
 import 'package:unihub/models/academic_subject_v2.dart';
 import 'package:unihub/models/class_session.dart';
 import 'package:unihub/models/subject_schedule_entry.dart';
-import 'package:unihub/screens/ui/calendar_screen_view.dart';
+import 'package:unihub/screens/ui/subjects_screen_view.dart';
 
-class CalendarScreen extends StatefulWidget {
-  const CalendarScreen({super.key});
+class SubjectsScreen extends StatefulWidget {
+  const SubjectsScreen({super.key});
 
   @override
-  State<CalendarScreen> createState() => _CalendarScreenState();
+  State<SubjectsScreen> createState() => _SubjectsScreenState();
 }
 
-class _CalendarScreenState extends State<CalendarScreen> {
+class _SubjectsScreenState extends State<SubjectsScreen> {
   final UniHubRepository _repository = UniHubRepository.instance;
   final ScheduleVisibilityStore _visibilityStore =
       ScheduleVisibilityStore.instance;
@@ -805,7 +805,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
               });
             }
 
-            return CalendarScreenView(
+            return SubjectsScreenView(
               selectedSemester: _selectedSemester,
               isSelectedSemesterVisibleInSchedule: !_hiddenScheduleSemesters
                   .contains(_selectedSemester),

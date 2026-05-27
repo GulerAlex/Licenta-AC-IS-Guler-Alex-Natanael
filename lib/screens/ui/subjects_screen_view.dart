@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'dart:ui' as ui;
 import 'package:unihub/models/subject_schedule_entry.dart';
 
-class CalendarScreenView extends StatefulWidget {
-  const CalendarScreenView({
+class SubjectsScreenView extends StatefulWidget {
+  const SubjectsScreenView({
     super.key,
     required this.selectedSemester,
     required this.isSelectedSemesterVisibleInSchedule,
@@ -51,10 +51,10 @@ class CalendarScreenView extends StatefulWidget {
   final VoidCallback onRetry;
 
   @override
-  State<CalendarScreenView> createState() => _CalendarScreenViewState();
+  State<SubjectsScreenView> createState() => _SubjectsScreenViewState();
 }
 
-class _CalendarScreenViewState extends State<CalendarScreenView> {
+class _SubjectsScreenViewState extends State<SubjectsScreenView> {
   bool _addButtonHovered = false;
   bool _deleteButtonHovered = false;
 
@@ -86,7 +86,7 @@ class _CalendarScreenViewState extends State<CalendarScreenView> {
                   child: Center(child: CircularProgressIndicator()),
                 )
               else if (widget.hasError)
-                CalendarLoadError(onRetry: widget.onRetry)
+                SubjectsLoadError(onRetry: widget.onRetry)
               else if (widget.subjectEntries.isEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 48),
@@ -350,8 +350,8 @@ class _CalendarScreenViewState extends State<CalendarScreenView> {
   }
 }
 
-class CalendarLoadError extends StatelessWidget {
-  const CalendarLoadError({super.key, required this.onRetry});
+class SubjectsLoadError extends StatelessWidget {
+  const SubjectsLoadError({super.key, required this.onRetry});
 
   final VoidCallback onRetry;
 
