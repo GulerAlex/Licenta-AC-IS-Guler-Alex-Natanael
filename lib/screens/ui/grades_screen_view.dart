@@ -170,30 +170,10 @@ class _GradesScreenViewState extends State<GradesScreenView> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: _SummaryMetric(
-                        label: 'Media UPT',
-                        value: widget.weightedAverage == null
-                            ? '-'
-                            : widget.weightedAverage!.toStringAsFixed(2),
-                        colors: colors,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _SummaryMetric(
-                        label: 'Credite',
-                        value: '${widget.earnedCredits}/${widget.totalCredits}',
-                        colors: colors,
-                      ),
-                    ),
-                  ],
-                ),
+                const SizedBox(height: 14),
+                _annualAveragePanel(colors),
                 if (widget.semesterAverages.isNotEmpty) ...<Widget>[
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   Row(
                     children: <Widget>[
                       for (
@@ -210,21 +190,12 @@ class _GradesScreenViewState extends State<GradesScreenView> {
                             ),
                             child: _semesterAverageMetric(
                               data: widget.semesterAverages[index],
+                              index: index,
                               colors: colors,
                             ),
                           ),
                         ),
                     ],
-                  ),
-                  const SizedBox(height: 8),
-                  _SummaryMetric(
-                    label: 'Media anuala',
-                    value: widget.weightedAverage == null
-                        ? '-'
-                        : widget.weightedAverage!.toStringAsFixed(2),
-                    supportingText:
-                        '${widget.earnedCredits}/${widget.totalCredits} credite',
-                    colors: colors,
                   ),
                 ],
                 const SizedBox(height: 12),
@@ -243,15 +214,115 @@ class _GradesScreenViewState extends State<GradesScreenView> {
     );
   }
 
+  Widget _annualAveragePanel(ColorScheme colors) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: colors.surface.withValues(alpha: 0.34),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colors.primary.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  'Media anuala',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: colors.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  widget.weightedAverage == null
+                      ? '-'
+                      : widget.weightedAverage!.toStringAsFixed(2),
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: colors.primary,
+                    fontWeight: FontWeight.w900,
+                    height: 1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _creditBadge(
+            colors: colors,
+            value: '${widget.earnedCredits}/${widget.totalCredits} credite',
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _semesterAverageMetric({
     required SemesterAverageData data,
+    required int index,
     required ColorScheme colors,
   }) {
-    return _SummaryMetric(
-      label: data.semesterLabel,
-      value: data.average == null ? '-' : data.average!.toStringAsFixed(2),
-      supportingText: '${data.earnedCredits}/${data.totalCredits} credite',
-      colors: colors,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: colors.surface.withValues(alpha: 0.24),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: colors.primary.withValues(alpha: 0.12)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'Sem. ${index + 1}',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: colors.onSurfaceVariant,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  data.average == null ? '-' : data.average!.toStringAsFixed(2),
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: colors.primary,
+                    fontWeight: FontWeight.w900,
+                    height: 1,
+                  ),
+                ),
+              ),
+              Text(
+                '${data.earnedCredits}/${data.totalCredits}',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: colors.onSurfaceVariant,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _creditBadge({required ColorScheme colors, required String value}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: colors.primary.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: colors.primary.withValues(alpha: 0.22)),
+      ),
+      child: Text(
+        value,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: colors.primary,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
     );
   }
 
@@ -632,62 +703,6 @@ class _ComponentGradeTile extends StatelessWidget {
             Icon(Icons.edit_rounded, size: 18, color: colors.primary),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _SummaryMetric extends StatelessWidget {
-  const _SummaryMetric({
-    required this.label,
-    required this.value,
-    required this.colors,
-    this.supportingText,
-  });
-
-  final String label;
-  final String value;
-  final ColorScheme colors;
-  final String? supportingText;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: colors.surface.withValues(alpha: 0.32),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: colors.primary.withValues(alpha: 0.16)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: colors.onSurfaceVariant,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              color: colors.primary,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          if (supportingText != null) ...<Widget>[
-            const SizedBox(height: 2),
-            Text(
-              supportingText!,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: colors.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ],
       ),
     );
   }
