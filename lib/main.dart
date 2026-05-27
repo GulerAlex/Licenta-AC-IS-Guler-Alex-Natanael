@@ -630,6 +630,9 @@ class _UniHubHomePageState extends State<UniHubHomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final double systemBottomInset = MediaQuery.viewPaddingOf(context).bottom;
+    final double navBarBottomMargin = systemBottomInset + 12;
+
     return Stack(
       children: <Widget>[
         const GrainBackground(),
@@ -651,7 +654,7 @@ class _UniHubHomePageState extends State<UniHubHomePage> {
             decoration: const NavBarDecoration(
               colorBehindNavBar: Colors.transparent,
             ),
-            margin: const EdgeInsets.fromLTRB(24, 0, 24, 26),
+            margin: EdgeInsets.fromLTRB(24, 0, 24, navBarBottomMargin),
             isVisible: true,
             animationSettings: const NavBarAnimationSettings(
               navBarItemAnimation: ItemAnimationSettings(

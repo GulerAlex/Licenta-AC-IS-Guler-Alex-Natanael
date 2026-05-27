@@ -257,15 +257,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
-  String _csvValue(Object? value) {
-    final String text = (value ?? '').toString();
-    if (!text.contains(',') && !text.contains('"') && !text.contains('\n')) {
-      return text;
-    }
-
-    return '"${text.replaceAll('"', '""')}"';
-  }
-
   String _weekdayLabel(int weekday) {
     return switch (weekday) {
       DateTime.monday => 'Luni',
@@ -277,6 +268,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
       DateTime.sunday => 'Duminica',
       _ => '',
     };
+  }
+
+  String _formatDateTime(DateTime value) {
+    final String day = value.day.toString().padLeft(2, '0');
+    final String month = value.month.toString().padLeft(2, '0');
+    final String hour = value.hour.toString().padLeft(2, '0');
+    final String minute = value.minute.toString().padLeft(2, '0');
+    return '$day.$month.${value.year} $hour:$minute';
+  }
+
+  String _componentSummary(GradeComponentRecord component) {
+    final List<String> parts = <String>[component.name];
+    parts.add(
+      component.grade == null
+          ? 'fara nota'
+          : component.grade!.toStringAsFixed(0),
+    );
+    if (component.weightPercent > 0) {
+      parts.add('${component.weightPercent.toStringAsFixed(0)}%');
+    }
+    return parts.join(' ');
   }
 
   Future<void> _exportAcademicData() async {
@@ -297,81 +309,179 @@ class _ProfileScreenState extends State<ProfileScreen> {
             for (final AcademicSubjectV2 subject in subjects)
               subject.id: subject,
           };
+      final List<AcademicSubjectV2> sortedSubjects =
+          List<AcademicSubjectV2>.of(subjects)
+            ..sort((AcademicSubjectV2 a, AcademicSubjectV2 b) {
+              final int semesterOrder = a.semesterLabel.compareTo(
+                b.semesterLabel,
+              );
+              if (semesterOrder != 0) {
+                return semesterOrder;
+              }
+              return a.name.compareTo(b.name);
+            });
+      final List<ClassSession> sortedSessions = List<ClassSession>.of(sessions)
+        ..sort((ClassSession a, ClassSession b) {
+          final AcademicSubjectV2? subjectA = subjectsById[a.subjectId];
+          final AcademicSubjectV2? subjectB = subjectsById[b.subjectId];
+          final int subjectOrder = (subjectA?.name ?? '').compareTo(
+            subjectB?.name ?? '',
+          );
+          if (subjectOrder != 0) {
+            return subjectOrder;
+          }
+          final int weekdayOrder = a.weekday.compareTo(b.weekday);
+          if (weekdayOrder != 0) {
+            return weekdayOrder;
+          }
+          return a.startsAtMinutes.compareTo(b.startsAtMinutes);
+        });
+      final List<GradeComponentRecord> sortedComponents =
+          List<GradeComponentRecord>.of(components)
+            ..sort((GradeComponentRecord a, GradeComponentRecord b) {
+              final AcademicSubjectV2? subjectA = subjectsById[a.subjectId];
+              final AcademicSubjectV2? subjectB = subjectsById[b.subjectId];
+              final int subjectOrder = (subjectA?.name ?? '').compareTo(
+                subjectB?.name ?? '',
+              );
+              if (subjectOrder != 0) {
+                return subjectOrder;
+              }
+              return a.name.compareTo(b.name);
+            });
+      final List<AcademicEvent> sortedEvents = List<AcademicEvent>.of(events)
+        ..sort((AcademicEvent a, AcademicEvent b) {
+          final DateTime aDate = a.effectiveDate ?? DateTime(9999);
+          final DateTime bDate = b.effectiveDate ?? DateTime(9999);
+          return aDate.compareTo(bDate);
+        });
+      final Map<String, List<GradeComponentRecord>> componentsBySubject =
+          <String, List<GradeComponentRecord>>{};
+      for (final GradeComponentRecord component in sortedComponents) {
+        componentsBySubject
+            .putIfAbsent(component.subjectId, () => <GradeComponentRecord>[])
+            .add(component);
+      }
 
       final List<String> lines = <String>[
-        'type,subject,semester,component,credits,weekday,time,room,professor,value',
-        ...subjects.map(
-          (AcademicSubjectV2 subject) => <Object?>[
-            'subject',
-            subject.name,
-            subject.semesterLabel,
-            '',
-            subject.credits,
-            '',
-            '',
-            '',
-            subject.professor,
-            '',
-          ].map(_csvValue).join(','),
-        ),
-        ...sessions.map((ClassSession session) {
-          final AcademicSubjectV2? subject = subjectsById[session.subjectId];
-          return <Object?>[
-            'class_session',
-            subject?.name ?? '',
-            subject?.semesterLabel ?? '',
-            session.sessionType,
-            subject?.credits ?? '',
-            _weekdayLabel(session.weekday),
-            session.intervalLabel,
-            session.room,
-            session.professor,
-            session.active ? 'active' : 'inactive',
-          ].map(_csvValue).join(',');
-        }),
-        ...components.map((GradeComponentRecord component) {
-          final AcademicSubjectV2? subject = subjectsById[component.subjectId];
-          return <Object?>[
-            'grade_component',
-            subject?.name ?? '',
-            subject?.semesterLabel ?? '',
-            component.name,
-            subject?.credits ?? '',
-            '',
-            '',
-            '',
-            '',
-            component.grade == null
-                ? 'pondere ${component.weightPercent}%'
-                : 'nota ${component.grade!.toStringAsFixed(0)}, pondere ${component.weightPercent}%',
-          ].map(_csvValue).join(',');
-        }),
-        ...events.map((AcademicEvent event) {
+        'UniHub - raport academic',
+        'Generat: ${_formatDateTime(DateTime.now())}',
+        '',
+      ];
+
+      for (final String semester in UniHubRepository.availableSemesters) {
+        final List<AcademicSubjectV2> semesterSubjects = sortedSubjects
+            .where(
+              (AcademicSubjectV2 subject) => subject.semesterLabel == semester,
+            )
+            .toList(growable: false);
+        final int semesterCredits = semesterSubjects.fold<int>(
+          0,
+          (int total, AcademicSubjectV2 subject) => total + subject.credits,
+        );
+
+        lines
+          ..add(semester.toUpperCase())
+          ..add('${semesterSubjects.length} materii | $semesterCredits credite')
+          ..add('')
+          ..add('Materii');
+        if (semesterSubjects.isEmpty) {
+          lines.add('- Nu exista materii.');
+        } else {
+          for (final AcademicSubjectV2 subject in semesterSubjects) {
+            final String professor = subject.professor.trim().isEmpty
+                ? ''
+                : ' | ${subject.professor.trim()}';
+            lines.add(
+              '- ${subject.name} (${subject.credits} credite)$professor',
+            );
+          }
+        }
+
+        lines
+          ..add('')
+          ..add('Activitati');
+        final List<ClassSession> semesterSessions = sortedSessions
+            .where(
+              (ClassSession session) =>
+                  subjectsById[session.subjectId]?.semesterLabel == semester,
+            )
+            .toList(growable: false);
+        if (semesterSessions.isEmpty) {
+          lines.add('- Nu exista activitati.');
+        } else {
+          for (final ClassSession session in semesterSessions) {
+            final AcademicSubjectV2? subject = subjectsById[session.subjectId];
+            final String room = session.room.trim().isEmpty
+                ? ''
+                : ' | ${session.room.trim()}';
+            final String professor = session.professor.trim().isEmpty
+                ? ''
+                : ' | ${session.professor.trim()}';
+            lines.add(
+              '- ${_weekdayLabel(session.weekday)} ${session.intervalLabel} | '
+              '${subject?.name ?? 'Materie necunoscuta'} | '
+              '${session.sessionType}$room$professor',
+            );
+          }
+        }
+
+        lines
+          ..add('')
+          ..add('Note si ponderi');
+        bool hasGrades = false;
+        for (final AcademicSubjectV2 subject in semesterSubjects) {
+          final List<GradeComponentRecord> subjectComponents =
+              componentsBySubject[subject.id] ?? const <GradeComponentRecord>[];
+          if (subjectComponents.isEmpty) {
+            continue;
+          }
+          hasGrades = true;
+          lines.add(
+            '- ${subject.name}: '
+            '${subjectComponents.map(_componentSummary).join(', ')}',
+          );
+        }
+        if (!hasGrades) {
+          lines.add('- Nu exista note introduse.');
+        }
+
+        lines.add('');
+      }
+
+      lines.add('EVENIMENTE ACADEMICE');
+      if (sortedEvents.isEmpty) {
+        lines.add('- Nu exista evenimente academice.');
+      } else {
+        for (final AcademicEvent event in sortedEvents) {
           final AcademicSubjectV2? subject = event.subjectId == null
               ? null
               : subjectsById[event.subjectId];
           final DateTime? eventDate = event.effectiveDate;
-          return <Object?>[
-            'academic_event',
-            subject?.name ?? '',
-            subject?.semesterLabel ?? '',
-            event.type.label,
-            subject?.credits ?? '',
-            eventDate == null ? '' : _weekdayLabel(eventDate.weekday),
-            eventDate == null ? '' : eventDate.toIso8601String(),
-            event.room,
-            '',
-            event.title,
-          ].map(_csvValue).join(',');
-        }),
-      ];
+          final String dateLabel = eventDate == null
+              ? 'Fara data'
+              : '${_weekdayLabel(eventDate.weekday)}, ${_formatDateTime(eventDate)}';
+          final String room = event.room.trim().isEmpty
+              ? ''
+              : ' | ${event.room.trim()}';
+          final String subjectName = subject == null
+              ? ''
+              : ' | ${subject.name}';
+          final String title = event.title.trim().isEmpty
+              ? ''
+              : ' | ${event.title.trim()}';
+          lines.add(
+            '- $dateLabel | ${event.type.label}$subjectName$room$title',
+          );
+        }
+      }
 
       await Clipboard.setData(ClipboardData(text: lines.join('\n')));
       if (!mounted) {
         return;
       }
       _showSnackBarAfterBuild(
-        const SnackBar(content: Text('Exportul CSV a fost copiat.')),
+        const SnackBar(content: Text('Raportul academic a fost copiat.')),
       );
     } catch (_) {
       if (!mounted) {

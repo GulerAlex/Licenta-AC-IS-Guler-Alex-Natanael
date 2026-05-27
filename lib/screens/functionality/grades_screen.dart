@@ -28,10 +28,9 @@ class GradesScreen extends StatefulWidget {
 
 class _GradesScreenState extends State<GradesScreen> {
   final UniHubRepository _repository = UniHubRepository.instance;
-  static const String _allSubjectsValue = '__all__';
 
   late Future<_GradesData> _gradesDataFuture;
-  String _selectedSubject = _allSubjectsValue;
+  String _selectedSemester = UniHubRepository.availableSemesters.first;
   RealtimeChannel? _subjectsRealtimeChannel;
   RealtimeChannel? _sessionsRealtimeChannel;
   RealtimeChannel? _componentsRealtimeChannel;
@@ -769,19 +768,6 @@ class _GradesScreenState extends State<GradesScreen> {
         .toList(growable: false);
   }
 
-  List<String> _subjectOptions(_GradesData data) {
-    final Set<String> subjectSet = data.subjects
-        .map((AcademicSubjectV2 subject) => subject.name.trim())
-        .where((String subject) => subject.isNotEmpty)
-        .toSet();
-
-    final List<String> subjects = subjectSet.toList(
-      growable: false,
-    )..sort((String a, String b) => a.toLowerCase().compareTo(b.toLowerCase()));
-
-    return <String>[_allSubjectsValue, ...subjects];
-  }
-
   AcademicSubject _buildAcademicSubject({
     required AcademicSubjectV2 subject,
     required _GradesData data,
@@ -839,7 +825,7 @@ class _GradesScreenState extends State<GradesScreen> {
 
   List<SubjectNoteCardData> _buildSubjectCards({
     required _GradesData data,
-    required String selectedSubject,
+    String? selectedSemester,
   }) {
     final List<AcademicSubjectV2> subjects =
         List<AcademicSubjectV2>.of(data.subjects)..sort(
@@ -851,8 +837,8 @@ class _GradesScreenState extends State<GradesScreen> {
 
     for (final AcademicSubjectV2 subjectModel in subjects) {
       final String subjectName = subjectModel.name;
-      if (selectedSubject != _allSubjectsValue &&
-          selectedSubject != subjectName) {
+      if (selectedSemester != null &&
+          subjectModel.semesterLabel != selectedSemester) {
         continue;
       }
 
@@ -929,13 +915,13 @@ class _GradesScreenState extends State<GradesScreen> {
         .toList(growable: false);
   }
 
-  void _changeSelectedSubject(String subject) {
-    if (subject == _selectedSubject) {
+  void _changeSelectedSemester(String semester) {
+    if (semester == _selectedSemester) {
       return;
     }
 
     setState(() {
-      _selectedSubject = subject;
+      _selectedSemester = semester;
     });
   }
 
@@ -959,27 +945,31 @@ class _GradesScreenState extends State<GradesScreen> {
               sessions: <ClassSession>[],
               components: <GradeComponentRecord>[],
             );
-        final List<String> subjectOptions = _subjectOptions(data);
-        final String selectedSubject = subjectOptions.contains(_selectedSubject)
-            ? _selectedSubject
-            : _allSubjectsValue;
+        final List<String> semesterOptions =
+            UniHubRepository.availableSemesters;
+        final String selectedSemester =
+            semesterOptions.contains(_selectedSemester)
+            ? _selectedSemester
+            : semesterOptions.first;
+        final List<SubjectNoteCardData> allSubjectCards = _buildSubjectCards(
+          data: data,
+        );
         final List<SubjectNoteCardData> subjectCards = _buildSubjectCards(
           data: data,
-          selectedSubject: selectedSubject,
+          selectedSemester: selectedSemester,
         );
 
         return GradesScreenView(
           subjectCards: subjectCards,
-          totalCredits: _totalCredits(subjectCards),
-          earnedCredits: _earnedCredits(subjectCards),
-          weightedAverage: _weightedAverage(subjectCards),
-          semesterAverages: _semesterAverages(subjectCards),
+          totalCredits: _totalCredits(allSubjectCards),
+          earnedCredits: _earnedCredits(allSubjectCards),
+          weightedAverage: _weightedAverage(allSubjectCards),
+          semesterAverages: _semesterAverages(allSubjectCards),
           onRefresh: _reload,
-          allSubjectsValue: _allSubjectsValue,
-          selectedSubject: selectedSubject,
-          subjectOptions: subjectOptions,
-          onSubjectChanged: _changeSelectedSubject,
-          totalSubjectsCount: subjectOptions.length - 1,
+          selectedSemester: selectedSemester,
+          semesterOptions: semesterOptions,
+          onSemesterChanged: _changeSelectedSemester,
+          totalSubjectsCount: subjectCards.length,
           onEditComponentGrade: _openComponentGradeDialog,
           onEditComponentWeights: _openComponentWeightDialog,
           onResetComponentWeights: _resetComponentWeights,

@@ -29,7 +29,9 @@ class TodayScreenView extends StatelessWidget {
     final ColorScheme colors = Theme.of(context).colorScheme;
     final bool isLoading = connectionState == ConnectionState.waiting;
     final double bottomContentPadding =
-        MediaQuery.paddingOf(context).bottom + kBottomNavigationBarHeight + 120;
+        MediaQuery.viewPaddingOf(context).bottom +
+        kBottomNavigationBarHeight +
+        120;
 
     return RefreshIndicator(
       onRefresh: onRefresh,

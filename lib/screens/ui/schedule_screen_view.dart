@@ -66,7 +66,9 @@ class ScheduleScreenView extends StatelessWidget {
     final ColorScheme colors = Theme.of(context).colorScheme;
     final bool isLoading = connectionState == ConnectionState.waiting;
     final double bottomContentPadding =
-        MediaQuery.paddingOf(context).bottom + kBottomNavigationBarHeight + 120;
+        MediaQuery.viewPaddingOf(context).bottom +
+        kBottomNavigationBarHeight +
+        120;
 
     return Stack(
       children: [
@@ -226,39 +228,48 @@ class ScheduleScreenView extends StatelessWidget {
                     horizontal: 14,
                     vertical: 12,
                   ),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      Expanded(
-                        child: Text(
-                          _formatSelectedDate(selectedDay),
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w700),
+                      Text(
+                        _formatSelectedDate(selectedDay),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      OutlinedButton.icon(
-                        onPressed: onOpenSelectedDayNoteEditor,
-                        icon: const Icon(Icons.note_add_outlined, size: 18),
-                        label: Text(
-                          (selectedDayNote ?? '').trim().isEmpty
-                              ? 'Adauga notita'
-                              : 'Editeaza notita',
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        onPressed: onOpenNotificationSettings,
-                        tooltip: 'Reminder-e',
-                        icon: Icon(
-                          courseNotificationsEnabled || examNotificationsEnabled
-                              ? Icons.notifications_active_rounded
-                              : Icons.notifications_none_rounded,
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: onOpenAddExam,
-                        tooltip: 'Adauga examen',
-                        icon: const Icon(Icons.add_task_rounded),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: <Widget>[
+                          OutlinedButton.icon(
+                            onPressed: onOpenSelectedDayNoteEditor,
+                            icon: const Icon(Icons.note_add_outlined, size: 18),
+                            label: Text(
+                              (selectedDayNote ?? '').trim().isEmpty
+                                  ? 'Adauga notita'
+                                  : 'Editeaza notita',
+                            ),
+                          ),
+                          IconButton.filledTonal(
+                            onPressed: onOpenNotificationSettings,
+                            tooltip: 'Reminder-e',
+                            icon: Icon(
+                              courseNotificationsEnabled ||
+                                      examNotificationsEnabled
+                                  ? Icons.notifications_active_rounded
+                                  : Icons.notifications_none_rounded,
+                            ),
+                          ),
+                          IconButton.filledTonal(
+                            onPressed: onOpenAddExam,
+                            tooltip: 'Adauga examen',
+                            icon: const Icon(Icons.add_task_rounded),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -675,6 +686,7 @@ class _DetailRow extends StatelessWidget {
     final ColorScheme colors = Theme.of(context).colorScheme;
 
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Container(
           padding: const EdgeInsets.all(6),
@@ -685,8 +697,20 @@ class _DetailRow extends StatelessWidget {
           child: Icon(icon, size: 16, color: colors.primary),
         ),
         const SizedBox(width: 10),
-        Text('$label: ', style: const TextStyle(fontWeight: FontWeight.w600)),
-        Expanded(child: Text(value)),
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              style: Theme.of(context).textTheme.bodyMedium,
+              children: <InlineSpan>[
+                TextSpan(
+                  text: '$label: ',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                TextSpan(text: value),
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }

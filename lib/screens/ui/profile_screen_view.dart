@@ -108,7 +108,7 @@ class _ProfileScreenViewState extends State<ProfileScreenView> {
               16,
               60,
               16,
-              MediaQuery.paddingOf(context).bottom +
+              MediaQuery.viewPaddingOf(context).bottom +
                   kBottomNavigationBarHeight +
                   72,
             ),
@@ -304,7 +304,11 @@ class _ProfileScreenViewState extends State<ProfileScreenView> {
                     (AppThemePreference preference) =>
                         ButtonSegment<AppThemePreference>(
                           value: preference,
-                          label: Text(preference.label),
+                          label: Text(switch (preference) {
+                            AppThemePreference.system => 'Auto',
+                            AppThemePreference.light => 'Light',
+                            AppThemePreference.dark => 'Dark',
+                          }, overflow: TextOverflow.ellipsis),
                           icon: Icon(switch (preference) {
                             AppThemePreference.system =>
                               Icons.brightness_auto_rounded,
@@ -825,7 +829,7 @@ class _ProfileScreenViewState extends State<ProfileScreenView> {
             onPressed: widget.onExportAcademicData,
             icon: Icon(Icons.file_download_rounded, color: colors.primary),
             label: Text(
-              'Exporta date CSV',
+              'Copiaza raport academic',
               style: TextStyle(
                 color: colors.primary,
                 fontWeight: FontWeight.w700,
@@ -952,13 +956,19 @@ class _StatItem extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  label,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colors.onSurfaceVariant,
-                    fontWeight: FontWeight.w500,
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colors.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                      height: 1.1,
+                    ),
                   ),
                 ),
+                const SizedBox(width: 6),
                 Icon(icon, size: 16, color: colors.primary),
               ],
             ),

@@ -35,10 +35,9 @@ class GradesScreenView extends StatefulWidget {
     required this.weightedAverage,
     required this.semesterAverages,
     required this.onRefresh,
-    required this.allSubjectsValue,
-    required this.selectedSubject,
-    required this.subjectOptions,
-    required this.onSubjectChanged,
+    required this.selectedSemester,
+    required this.semesterOptions,
+    required this.onSemesterChanged,
     required this.totalSubjectsCount,
     required this.onEditComponentGrade,
     required this.onEditComponentWeights,
@@ -51,10 +50,9 @@ class GradesScreenView extends StatefulWidget {
   final double? weightedAverage;
   final List<SemesterAverageData> semesterAverages;
   final Future<void> Function() onRefresh;
-  final String allSubjectsValue;
-  final String selectedSubject;
-  final List<String> subjectOptions;
-  final ValueChanged<String> onSubjectChanged;
+  final String selectedSemester;
+  final List<String> semesterOptions;
+  final ValueChanged<String> onSemesterChanged;
   final int totalSubjectsCount;
   final Future<void> Function(String subjectName, String componentName)
   onEditComponentGrade;
@@ -70,7 +68,9 @@ class _GradesScreenViewState extends State<GradesScreenView> {
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
     final double bottomContentPadding =
-        MediaQuery.paddingOf(context).bottom + kBottomNavigationBarHeight + 72;
+        MediaQuery.viewPaddingOf(context).bottom +
+        kBottomNavigationBarHeight +
+        72;
     return Stack(
       children: [
         // Main content
@@ -97,9 +97,8 @@ class _GradesScreenViewState extends State<GradesScreenView> {
               else if (widget.subjectCards.isEmpty)
                 _GradesEmptyState(
                   icon: Icons.filter_alt_off_rounded,
-                  title: 'Nicio materie pentru filtrul ales',
-                  message:
-                      'Schimba filtrul pe Toate materiile sau selecteaza alta materie.',
+                  title: 'Nicio materie in semestrul ales',
+                  message: 'Selecteaza celalalt semestru sau adauga materii.',
                   colors: colors,
                 )
               else
@@ -361,37 +360,15 @@ class _GradesScreenViewState extends State<GradesScreenView> {
                   ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: widget.selectedSubject,
-                  decoration: InputDecoration(
-                    labelText: 'Materie',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    prefixIcon: Icon(Icons.book_rounded, color: colors.primary),
-                  ),
-                  items: widget.subjectOptions
-                      .map(
-                        (String subject) => DropdownMenuItem<String>(
-                          value: subject,
-                          child: Text(
-                            subject == widget.allSubjectsValue
-                                ? 'Toate materiile'
-                                : subject,
-                          ),
-                        ),
-                      )
-                      .toList(growable: false),
-                  onChanged: (String? value) {
-                    if (value == null) {
-                      return;
-                    }
-                    widget.onSubjectChanged(value);
-                  },
+                _SemesterFilterControl(
+                  selectedSemester: widget.selectedSemester,
+                  semesterOptions: widget.semesterOptions,
+                  colors: colors,
+                  onChanged: widget.onSemesterChanged,
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Total materii: ${widget.totalSubjectsCount}',
+                  'Materii in semestru: ${widget.totalSubjectsCount}',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: colors.onSurfaceVariant,
                     fontStyle: FontStyle.italic,
@@ -401,6 +378,99 @@ class _GradesScreenViewState extends State<GradesScreenView> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _SemesterFilterControl extends StatelessWidget {
+  const _SemesterFilterControl({
+    required this.selectedSemester,
+    required this.semesterOptions,
+    required this.colors,
+    required this.onChanged,
+  });
+
+  final String selectedSemester;
+  final List<String> semesterOptions;
+  final ColorScheme colors;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: colors.surface.withValues(alpha: 0.32),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colors.secondary.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        children: semesterOptions
+            .map((String semester) {
+              final bool selected = semester == selectedSemester;
+              return Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    right: semester == semesterOptions.last ? 0 : 6,
+                  ),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOutCubic,
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? colors.primary.withValues(alpha: 0.16)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: selected
+                            ? colors.primary.withValues(alpha: 0.45)
+                            : Colors.transparent,
+                      ),
+                    ),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: selected ? null : () => onChanged(semester),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 10,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: <Widget>[
+                            Icon(
+                              selected
+                                  ? Icons.check_circle_rounded
+                                  : Icons.circle_outlined,
+                              size: 17,
+                              color: selected
+                                  ? colors.primary
+                                  : colors.onSurfaceVariant,
+                            ),
+                            const SizedBox(width: 7),
+                            Flexible(
+                              child: Text(
+                                semester,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.labelMedium
+                                    ?.copyWith(
+                                      color: selected
+                                          ? colors.primary
+                                          : colors.onSurfaceVariant,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            })
+            .toList(growable: false),
       ),
     );
   }

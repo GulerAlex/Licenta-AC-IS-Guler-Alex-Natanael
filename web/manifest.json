@@ -1,11 +1,11 @@
 {
-    "name": "unihub",
-    "short_name": "unihub",
+    "name": "UniHub",
+    "short_name": "UniHub",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Aplicatie pentru organizarea activitatii academice a studentilor.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
