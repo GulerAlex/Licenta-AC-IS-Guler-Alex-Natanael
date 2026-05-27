@@ -88,14 +88,11 @@ class _SubjectsScreenViewState extends State<SubjectsScreenView> {
               else if (widget.hasError)
                 SubjectsLoadError(onRetry: widget.onRetry)
               else if (widget.subjectEntries.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 48),
-                  child: Center(
-                    child: Text(
-                      'Nu exista materii pentru acest semestru.',
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
-                  ),
+                _SubjectsEmptyState(
+                  colors: colors,
+                  isSemesterVisibleInSchedule:
+                      widget.isSelectedSemesterVisibleInSchedule,
+                  selectedSemester: widget.selectedSemester,
                 )
               else
                 ...widget.subjectEntries.map(
@@ -365,6 +362,54 @@ class SubjectsLoadError extends StatelessWidget {
           const Text('Nu s-au putut incarca materiile.'),
           const SizedBox(height: 12),
           FilledButton(onPressed: onRetry, child: const Text('Reincearca')),
+        ],
+      ),
+    );
+  }
+}
+
+class _SubjectsEmptyState extends StatelessWidget {
+  const _SubjectsEmptyState({
+    required this.colors,
+    required this.isSemesterVisibleInSchedule,
+    required this.selectedSemester,
+  });
+
+  final ColorScheme colors;
+  final bool isSemesterVisibleInSchedule;
+  final String selectedSemester;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: 20),
+      padding: const EdgeInsets.fromLTRB(18, 20, 18, 20),
+      decoration: BoxDecoration(
+        color: colors.surface.withValues(alpha: 0.30),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colors.primary.withValues(alpha: 0.16)),
+      ),
+      child: Column(
+        children: <Widget>[
+          Icon(Icons.menu_book_rounded, color: colors.primary, size: 30),
+          const SizedBox(height: 10),
+          Text(
+            'Nu ai materii in $selectedSemester',
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            isSemesterVisibleInSchedule
+                ? 'Adauga prima materie si apoi completeaza cursurile, seminarele sau laboratoarele.'
+                : 'Semestrul este ascuns din Orar. Il poti face vizibil din toggle-ul de mai sus.',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );

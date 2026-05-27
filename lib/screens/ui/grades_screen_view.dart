@@ -87,18 +87,20 @@ class _GradesScreenViewState extends State<GradesScreenView> {
               const SizedBox(height: 20),
               // Content area
               if (widget.subjectCards.isEmpty && widget.totalSubjectsCount == 0)
-                Center(
-                  child: Text(
-                    'Nu exista materii inca. Adauga din pagina Materii.',
-                    style: Theme.of(context).textTheme.bodyLarge,
-                  ),
+                _GradesEmptyState(
+                  icon: Icons.menu_book_rounded,
+                  title: 'Nu ai materii adaugate',
+                  message:
+                      'Adauga materiile din pagina Materii, apoi revino aici pentru note, credite si medii.',
+                  colors: colors,
                 )
               else if (widget.subjectCards.isEmpty)
-                Center(
-                  child: Text(
-                    'Nu exista rezultate pentru filtrele selectate.',
-                    style: Theme.of(context).textTheme.bodyLarge,
-                  ),
+                _GradesEmptyState(
+                  icon: Icons.filter_alt_off_rounded,
+                  title: 'Nicio materie pentru filtrul ales',
+                  message:
+                      'Schimba filtrul pe Toate materiile sau selecteaza alta materie.',
+                  colors: colors,
                 )
               else
                 ...widget.subjectCards.map(
@@ -703,6 +705,53 @@ class _ComponentGradeTile extends StatelessWidget {
             Icon(Icons.edit_rounded, size: 18, color: colors.primary),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _GradesEmptyState extends StatelessWidget {
+  const _GradesEmptyState({
+    required this.icon,
+    required this.title,
+    required this.message,
+    required this.colors,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+  final ColorScheme colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 20, 18, 20),
+      decoration: BoxDecoration(
+        color: colors.surface.withValues(alpha: 0.30),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colors.primary.withValues(alpha: 0.16)),
+      ),
+      child: Column(
+        children: <Widget>[
+          Icon(icon, color: colors.primary, size: 30),
+          const SizedBox(height: 10),
+          Text(
+            title,
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            message,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }

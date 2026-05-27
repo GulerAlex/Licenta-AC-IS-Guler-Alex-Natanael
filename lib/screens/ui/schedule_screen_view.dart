@@ -308,11 +308,9 @@ class ScheduleScreenView extends StatelessWidget {
                 ],
                 const SizedBox(height: 12),
                 if (dailyClasses.isEmpty && dailyEvents.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 28),
-                    child: Center(
-                      child: Text('Nu exista activitati pentru ziua aleasa.'),
-                    ),
+                  _ScheduleEmptyState(
+                    colors: colors,
+                    hasNote: (selectedDayNote ?? '').trim().isNotEmpty,
                   )
                 else
                   ...dailyClasses.map(
@@ -501,6 +499,49 @@ class _AcademicEventCard extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ScheduleEmptyState extends StatelessWidget {
+  const _ScheduleEmptyState({required this.colors, required this.hasNote});
+
+  final ColorScheme colors;
+  final bool hasNote;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.fromLTRB(18, 20, 18, 20),
+      decoration: BoxDecoration(
+        color: colors.surface.withValues(alpha: 0.30),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colors.primary.withValues(alpha: 0.16)),
+      ),
+      child: Column(
+        children: <Widget>[
+          Icon(Icons.event_available_rounded, color: colors.primary, size: 30),
+          const SizedBox(height: 10),
+          Text(
+            hasNote ? 'Zi fara activitati' : 'Nu ai nimic programat aici',
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            hasNote
+                ? 'Ai doar notita zilei. Poti adauga un examen sau o activitate din Materii.'
+                : 'Adauga activitati din Materii sau foloseste butonul + pentru un examen.',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }
