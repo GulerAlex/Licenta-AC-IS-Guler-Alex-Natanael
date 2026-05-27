@@ -439,14 +439,17 @@ class _SubjectsScreenState extends State<SubjectsScreen> {
           ),
         ),
       );
-    } catch (_) {
+    } catch (e, stackTrace) {
+      debugPrint('Failed to add subject: $e');
+      debugPrint('Failed to add subject stack: $stackTrace');
       if (!mounted) {
         return;
       }
+      final String message = e is StateError
+          ? e.message
+          : 'Nu am putut adauga materia. Incearca din nou.';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Nu am putut adauga materia. Incearca din nou.'),
-        ),
+        SnackBar(content: Text(message)),
       );
     } finally {
       if (mounted) {

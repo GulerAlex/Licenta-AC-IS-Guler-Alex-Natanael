@@ -4,6 +4,26 @@
 
 create extension if not exists pgcrypto;
 
+create table if not exists public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  full_name text not null default '',
+  faculty text not null default '',
+  study_year integer check (study_year is null or study_year between 1 and 4),
+  university_email text not null default '',
+  group_code text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.profiles
+  add column if not exists full_name text not null default '',
+  add column if not exists faculty text not null default '',
+  add column if not exists study_year integer,
+  add column if not exists university_email text not null default '',
+  add column if not exists group_code text not null default '',
+  add column if not exists created_at timestamptz not null default now(),
+  add column if not exists updated_at timestamptz not null default now();
+
 create table if not exists public.subjects (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -126,11 +146,34 @@ create table if not exists public.study_tasks (
   updated_at timestamptz not null default now()
 );
 
+alter table public.profiles enable row level security;
 alter table public.subjects enable row level security;
 alter table public.class_sessions enable row level security;
 alter table public.academic_events enable row level security;
 alter table public.grade_components enable row level security;
 alter table public.study_tasks enable row level security;
+
+drop policy if exists "Users can read their profile" on public.profiles;
+create policy "Users can read their profile"
+  on public.profiles
+  for select
+  to authenticated
+  using (auth.uid() = id);
+
+drop policy if exists "Users can insert their profile" on public.profiles;
+create policy "Users can insert their profile"
+  on public.profiles
+  for insert
+  to authenticated
+  with check (auth.uid() = id);
+
+drop policy if exists "Users can update their profile" on public.profiles;
+create policy "Users can update their profile"
+  on public.profiles
+  for update
+  to authenticated
+  using (auth.uid() = id)
+  with check (auth.uid() = id);
 
 drop policy if exists "Users can read their subjects" on public.subjects;
 create policy "Users can read their subjects"

@@ -13,6 +13,9 @@ import 'package:unihub/services/academic_progress_calculator.dart';
 class UniHubRepository {
   UniHubRepository._();
 
+  static const String academicSchemaSetupMessage =
+      'Schema academica nu este pregatita. Ruleaza supabase_academic_schema_v2.sql in Supabase.';
+
   static final UniHubRepository instance = UniHubRepository._();
   final ValueNotifier<int> academicDataVersion = ValueNotifier<int>(0);
   static const String pendingCourseTimeLabel = '__PENDING__';
@@ -30,6 +33,30 @@ class UniHubRepository {
   ];
 
   SupabaseClient get _client => Supabase.instance.client;
+
+  Future<T> _withAcademicSchemaDiagnostics<T>(
+    String action,
+    Future<T> Function() load,
+  ) async {
+    try {
+      return await load();
+    } on PostgrestException catch (e) {
+      debugPrint(
+        'Supabase academic action failed [$action]: '
+        'code=${e.code} message=${e.message} details=${e.details} hint=${e.hint}',
+      );
+      if (e.code == '42P01' ||
+          e.message.toLowerCase().contains('could not find the table') ||
+          e.message.toLowerCase().contains('does not exist')) {
+        throw StateError(academicSchemaSetupMessage);
+      }
+      rethrow;
+    } catch (e, stackTrace) {
+      debugPrint('Academic repository action failed [$action]: $e');
+      debugPrint('Academic repository action stack [$action]: $stackTrace');
+      rethrow;
+    }
+  }
 
   void _notifyAcademicDataChanged() {
     academicDataVersion.value += 1;
@@ -159,62 +186,66 @@ class UniHubRepository {
   Future<List<AcademicSubjectV2>> fetchSubjectsV2({
     bool includeArchived = false,
   }) async {
-    final User user = _requireCurrentUser();
-    var query = _client
-        .from('subjects')
-        .select(
-          'id, name, semester_label, credits, professor, color_hex, archived',
-        )
-        .eq('user_id', user.id);
-    if (!includeArchived) {
-      query = query.eq('archived', false);
-    }
+    return _withAcademicSchemaDiagnostics('fetch subjects', () async {
+      final User user = _requireCurrentUser();
+      var query = _client
+          .from('subjects')
+          .select(
+            'id, name, semester_label, credits, professor, color_hex, archived',
+          )
+          .eq('user_id', user.id);
+      if (!includeArchived) {
+        query = query.eq('archived', false);
+      }
 
-    final List<dynamic> rows = await query
-        .order('semester_label', ascending: true)
-        .order('name', ascending: true);
+      final List<dynamic> rows = await query
+          .order('semester_label', ascending: true)
+          .order('name', ascending: true);
 
-    return rows
-        .whereType<Map<String, dynamic>>()
-        .map(AcademicSubjectV2.fromMap)
-        .toList(growable: false);
+      return rows
+          .whereType<Map<String, dynamic>>()
+          .map(AcademicSubjectV2.fromMap)
+          .toList(growable: false);
+    });
   }
 
   Future<AcademicSubjectV2> upsertSubjectV2(AcademicSubjectV2 subject) async {
-    final User user = _requireCurrentUser();
-    _validateSubjectV2(subject);
+    return _withAcademicSchemaDiagnostics('save subject', () async {
+      final User user = _requireCurrentUser();
+      _validateSubjectV2(subject);
 
-    final Map<String, dynamic> payload = subject.toSupabasePayload(
-      userId: user.id,
-    );
+      final Map<String, dynamic> payload = subject.toSupabasePayload(
+        userId: user.id,
+      );
 
-    final List<dynamic> rows;
-    if (subject.id.trim().isEmpty) {
-      rows = await _client
-          .from('subjects')
-          .upsert(payload, onConflict: 'user_id,name,semester_label')
-          .select(
-            'id, name, semester_label, credits, professor, color_hex, archived',
-          );
-    } else {
-      rows = await _client
-          .from('subjects')
-          .update(payload)
-          .eq('user_id', user.id)
-          .eq('id', subject.id)
-          .select(
-            'id, name, semester_label, credits, professor, color_hex, archived',
-          );
-    }
+      final List<dynamic> rows;
+      if (subject.id.trim().isEmpty) {
+        rows = await _client
+            .from('subjects')
+            .upsert(payload, onConflict: 'user_id,name,semester_label')
+            .select(
+              'id, name, semester_label, credits, professor, color_hex, archived',
+            );
+      } else {
+        rows = await _client
+            .from('subjects')
+            .update(payload)
+            .eq('user_id', user.id)
+            .eq('id', subject.id)
+            .select(
+              'id, name, semester_label, credits, professor, color_hex, archived',
+            );
+      }
 
-    if (rows.isEmpty) {
-      throw StateError('Subject not found.');
-    }
-    final AcademicSubjectV2 saved = AcademicSubjectV2.fromMap(
-      rows.first as Map<String, dynamic>,
-    );
-    _notifyAcademicDataChanged();
-    return saved;
+      if (rows.isEmpty) {
+        throw StateError('Subject not found.');
+      }
+      final AcademicSubjectV2 saved = AcademicSubjectV2.fromMap(
+        rows.first as Map<String, dynamic>,
+      );
+      _notifyAcademicDataChanged();
+      return saved;
+    });
   }
 
   Future<void> deleteSubjectV2(String subjectId) async {
