@@ -12,6 +12,7 @@ class AcademicSetupScreenView extends StatelessWidget {
     required this.onFacultySelected,
     required this.onStudyYearSelected,
     required this.onSubmit,
+    required this.onSkip,
   });
 
   final GlobalKey<FormState> formKey;
@@ -22,6 +23,7 @@ class AcademicSetupScreenView extends StatelessWidget {
   final ValueChanged<String> onFacultySelected;
   final ValueChanged<int> onStudyYearSelected;
   final Future<void> Function() onSubmit;
+  final VoidCallback onSkip;
 
   @override
   Widget build(BuildContext context) {
@@ -124,6 +126,14 @@ class AcademicSetupScreenView extends StatelessWidget {
                             label: Text(
                               isSaving ? 'Se salveaza...' : 'Continua',
                             ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: TextButton(
+                            onPressed: isSaving ? null : onSkip,
+                            child: const Text('Completez mai tarziu'),
                           ),
                         ),
                       ],

@@ -2,10 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:unihub/screens/ui/academic_setup_screen_view.dart';
 
 class AcademicSetupScreen extends StatefulWidget {
-  const AcademicSetupScreen({super.key, required this.onSaveAcademicDetails});
+  const AcademicSetupScreen({
+    super.key,
+    required this.onSaveAcademicDetails,
+    required this.onSkip,
+  });
 
   final Future<bool> Function({required String faculty, required int studyYear})
   onSaveAcademicDetails;
+  final VoidCallback onSkip;
 
   @override
   State<AcademicSetupScreen> createState() => _AcademicSetupScreenState();
@@ -79,7 +84,12 @@ class _AcademicSetupScreenState extends State<AcademicSetupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Profil academic')),
+      appBar: AppBar(
+        title: const Text('Profil academic'),
+        actions: <Widget>[
+          TextButton(onPressed: widget.onSkip, child: const Text('Mai tarziu')),
+        ],
+      ),
       body: SafeArea(
         child: AcademicSetupScreenView(
           formKey: _formKey,
@@ -98,6 +108,7 @@ class _AcademicSetupScreenState extends State<AcademicSetupScreen> {
             });
           },
           onSubmit: _submit,
+          onSkip: widget.onSkip,
         ),
       ),
     );

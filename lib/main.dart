@@ -206,6 +206,7 @@ class _AuthGatewayState extends State<AuthGateway> {
   bool _isInitialized = false;
   bool _isResolvingGroup = false;
   bool _needsAcademicProfileSetup = false;
+  bool _didSkipAcademicProfileSetup = false;
   String? _selectedGroupCode;
   Session? _session;
   StreamSubscription<AuthState>? _authSubscription;
@@ -249,6 +250,7 @@ class _AuthGatewayState extends State<AuthGateway> {
         if (data.session == null) {
           _selectedGroupCode = null;
           _needsAcademicProfileSetup = false;
+          _didSkipAcademicProfileSetup = false;
         }
       });
 
@@ -279,6 +281,7 @@ class _AuthGatewayState extends State<AuthGateway> {
       setState(() {
         _selectedGroupCode = null;
         _needsAcademicProfileSetup = false;
+        _didSkipAcademicProfileSetup = false;
       });
       return;
     }
@@ -305,7 +308,8 @@ class _AuthGatewayState extends State<AuthGateway> {
       setState(() {
         _selectedGroupCode = groupCode;
         _needsAcademicProfileSetup =
-            profile.faculty.trim().isEmpty || profile.studyYear == null;
+            !_didSkipAcademicProfileSetup &&
+            (profile.faculty.trim().isEmpty || profile.studyYear == null);
       });
     } catch (e, stackTrace) {
       _authLog('Onboarding state fetch failed: $e');
@@ -361,6 +365,7 @@ class _AuthGatewayState extends State<AuthGateway> {
       if (mounted) {
         setState(() {
           _needsAcademicProfileSetup = false;
+          _didSkipAcademicProfileSetup = false;
         });
       }
       await _refreshOnboardingState();
@@ -371,6 +376,14 @@ class _AuthGatewayState extends State<AuthGateway> {
       _authLog('Academic profile setup stack: $stackTrace');
       return false;
     }
+  }
+
+  void _skipAcademicProfileSetup() {
+    _authLog('Academic profile setup skipped for current session.');
+    setState(() {
+      _needsAcademicProfileSetup = false;
+      _didSkipAcademicProfileSetup = true;
+    });
   }
 
   Future<void> _logNetworkProbe(String source) async {
@@ -509,6 +522,7 @@ class _AuthGatewayState extends State<AuthGateway> {
       if (_needsAcademicProfileSetup) {
         return AcademicSetupScreen(
           onSaveAcademicDetails: _saveAcademicProfileSetup,
+          onSkip: _skipAcademicProfileSetup,
         );
       }
 
