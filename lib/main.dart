@@ -562,7 +562,10 @@ class _UniHubHomePageState extends State<UniHubHomePage> {
   }
 
   List<Widget> get _screens => <Widget>[
-    const TodayScreen(),
+    TodayScreen(
+      onOpenSchedule: () => _controller.jumpToTab(1),
+      onOpenSubjects: () => _controller.jumpToTab(2),
+    ),
     const ScheduleScreen(),
     const SubjectsScreen(),
     GradesScreen(

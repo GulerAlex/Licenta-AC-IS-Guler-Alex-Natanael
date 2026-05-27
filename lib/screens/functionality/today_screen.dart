@@ -11,7 +11,14 @@ import 'package:unihub/models/today_overview.dart';
 import 'package:unihub/screens/ui/today_screen_view.dart';
 
 class TodayScreen extends StatefulWidget {
-  const TodayScreen({super.key});
+  const TodayScreen({
+    super.key,
+    required this.onOpenSchedule,
+    required this.onOpenSubjects,
+  });
+
+  final VoidCallback onOpenSchedule;
+  final VoidCallback onOpenSubjects;
 
   @override
   State<TodayScreen> createState() => _TodayScreenState();
@@ -191,6 +198,8 @@ class _TodayScreenState extends State<TodayScreen> {
           hasError: snapshot.hasError,
           onRefresh: _reload,
           onRetry: _reload,
+          onOpenSchedule: widget.onOpenSchedule,
+          onOpenSubjects: widget.onOpenSubjects,
         );
       },
     );

@@ -12,6 +12,8 @@ class TodayScreenView extends StatelessWidget {
     required this.hasError,
     required this.onRefresh,
     required this.onRetry,
+    required this.onOpenSchedule,
+    required this.onOpenSubjects,
   });
 
   final TodayOverview? overview;
@@ -19,6 +21,8 @@ class TodayScreenView extends StatelessWidget {
   final bool hasError;
   final Future<void> Function() onRefresh;
   final VoidCallback onRetry;
+  final VoidCallback onOpenSchedule;
+  final VoidCallback onOpenSubjects;
 
   @override
   Widget build(BuildContext context) {
@@ -53,21 +57,38 @@ class TodayScreenView extends StatelessWidget {
             )
           else if (hasError)
             _StateCard(
-              icon: Icons.storage_rounded,
-              title: 'Schema academica v2 nu este pregatita',
+              icon: Icons.cloud_off_rounded,
+              title: 'Nu am putut incarca datele',
               message:
-                  'Ruleaza mai intai SQL-ul supabase_academic_schema_v2.sql in Supabase, apoi revino aici.',
+                  'Verifica conexiunea si incearca din nou. Daca problema continua, datele academice nu sunt disponibile momentan.',
               action: FilledButton(
                 onPressed: onRetry,
                 child: const Text('Reincearca'),
               ),
             )
           else if (overview == null || !overview!.hasAnyData)
-            const _StateCard(
-              icon: Icons.dashboard_customize_outlined,
-              title: 'Nu exista date academice in schema noua',
+            _StateCard(
+              icon: Icons.dashboard_customize_rounded,
+              title: 'Pregateste-ti dashboard-ul',
               message:
-                  'Dupa migrarea datelor, aici vor aparea cursurile de azi, deadline-urile, examenele si riscurile academice.',
+                  'Adauga materiile si activitatile din orar ca sa vezi aici cursurile de azi, examenele apropiate si riscurile la note.',
+              action: Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 10,
+                runSpacing: 8,
+                children: <Widget>[
+                  FilledButton.icon(
+                    onPressed: onOpenSubjects,
+                    icon: const Icon(Icons.menu_book_rounded),
+                    label: const Text('Adauga materii'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: onOpenSchedule,
+                    icon: const Icon(Icons.calendar_month_rounded),
+                    label: const Text('Deschide orarul'),
+                  ),
+                ],
+              ),
             )
           else ...<Widget>[
             _NextClassCard(item: overview!.nextClass),

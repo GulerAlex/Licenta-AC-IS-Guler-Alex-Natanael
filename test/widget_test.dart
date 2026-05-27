@@ -16,11 +16,12 @@ void main() {
 
   testWidgets('Login screen is shown first', (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 3));
 
-    expect(find.text('Welcome to UniHub'), findsOneWidget);
+    expect(find.text('Bine ai venit'), findsOneWidget);
     expect(find.text('Email'), findsOneWidget);
-    expect(find.text('Password'), findsOneWidget);
-    expect(find.text('Sign Up'), findsOneWidget);
+    expect(find.text('Parola'), findsOneWidget);
+    expect(find.text('Autentificare'), findsOneWidget);
   });
 }
