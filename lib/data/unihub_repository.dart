@@ -638,6 +638,7 @@ class UniHubRepository {
   Future<void> setAcademicProfileDetails({
     required String faculty,
     required int studyYear,
+    String? groupCode,
   }) async {
     final User? user = _client.auth.currentUser;
     if (user == null) {
@@ -651,12 +652,28 @@ class UniHubRepository {
     if (studyYear < 1 || studyYear > 4) {
       throw ArgumentError('studyYear must be between 1 and 4.');
     }
+    final String? normalizedGroupCode = groupCode?.trim();
+    if (normalizedGroupCode != null &&
+        !availableGroups.contains(normalizedGroupCode)) {
+      throw ArgumentError.value(groupCode, 'groupCode', 'Invalid group code');
+    }
 
-    await _client.from('profiles').upsert(<String, dynamic>{
-      'id': user.id,
+    final Map<String, dynamic> payload = <String, dynamic>{
       'faculty': normalizedFaculty,
       'study_year': studyYear,
-    }, onConflict: 'id');
+      if (normalizedGroupCode != null) 'group_code': normalizedGroupCode,
+    };
+
+    final Map<String, dynamic>? updatedProfile = await _client
+        .from('profiles')
+        .update(payload)
+        .eq('id', user.id)
+        .select('id')
+        .maybeSingle();
+
+    if (updatedProfile == null) {
+      throw StateError('Authenticated user profile does not exist.');
+    }
   }
 
   Future<UserProfile> fetchProfile() async {

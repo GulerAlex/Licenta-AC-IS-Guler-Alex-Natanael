@@ -338,8 +338,8 @@ class _AuthGatewayState extends State<AuthGateway> {
       await UniHubRepository.instance.setAcademicProfileDetails(
         faculty: faculty,
         studyYear: studyYear,
+        groupCode: groupCode,
       );
-      await UniHubRepository.instance.setCurrentGroupCode(groupCode);
       if (mounted) {
         setState(() {
           _needsOnboarding = false;

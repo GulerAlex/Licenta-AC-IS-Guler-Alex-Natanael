@@ -41,27 +41,51 @@ class _TodayScreenState extends State<TodayScreen> {
     await _overviewFuture;
   }
 
+  Future<List<T>> _loadTodaySection<T>(
+    String label,
+    Future<List<T>> Function() load,
+  ) async {
+    try {
+      return await load();
+    } catch (e, stackTrace) {
+      debugPrint('Failed to load Today $label: $e');
+      debugPrint('Failed to load Today $label stack: $stackTrace');
+      return <T>[];
+    }
+  }
+
   Future<TodayOverview> _loadOverview() async {
     final DateTime now = DateTime.now();
     final DateTime today = DateTime(now.year, now.month, now.day);
     final DateTime horizon = today.add(const Duration(days: 14));
 
-    final List<AcademicSubjectV2> subjects = await _repository
-        .fetchSubjectsV2();
+    final List<AcademicSubjectV2> subjects =
+        await _loadTodaySection<AcademicSubjectV2>(
+          'subjects',
+          _repository.fetchSubjectsV2,
+        );
     final Map<String, AcademicSubjectV2> subjectsById =
         <String, AcademicSubjectV2>{
           for (final AcademicSubjectV2 subject in subjects) subject.id: subject,
         };
 
-    final List<ClassSession> sessions = await _repository
-        .fetchClassSessionsV2();
-    final List<AcademicEvent> events = await _repository.fetchAcademicEventsV2(
-      from: today,
-      to: horizon,
+    final List<ClassSession> sessions = await _loadTodaySection<ClassSession>(
+      'class sessions',
+      _repository.fetchClassSessionsV2,
     );
-    final List<StudyTask> tasks = await _repository.fetchStudyTasksV2();
-    final List<GradeComponentRecord> gradeComponents = await _repository
-        .fetchGradeComponentsV2();
+    final List<AcademicEvent> events = await _loadTodaySection<AcademicEvent>(
+      'academic events',
+      () => _repository.fetchAcademicEventsV2(from: today, to: horizon),
+    );
+    final List<StudyTask> tasks = await _loadTodaySection<StudyTask>(
+      'study tasks',
+      _repository.fetchStudyTasksV2,
+    );
+    final List<GradeComponentRecord> gradeComponents =
+        await _loadTodaySection<GradeComponentRecord>(
+          'grade components',
+          _repository.fetchGradeComponentsV2,
+        );
 
     final List<TodayClassItem> todayClasses =
         sessions
