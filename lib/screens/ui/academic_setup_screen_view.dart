@@ -7,10 +7,13 @@ class AcademicSetupScreenView extends StatelessWidget {
     required this.formKey,
     required this.facultyController,
     required this.selectedStudyYear,
+    required this.selectedGroup,
     required this.isSaving,
     required this.facultyOptions,
+    required this.groupOptions,
     required this.onFacultySelected,
     required this.onStudyYearSelected,
+    required this.onGroupSelected,
     required this.onSubmit,
     required this.onSkip,
   });
@@ -18,10 +21,13 @@ class AcademicSetupScreenView extends StatelessWidget {
   final GlobalKey<FormState> formKey;
   final TextEditingController facultyController;
   final int? selectedStudyYear;
+  final String? selectedGroup;
   final bool isSaving;
   final List<String> facultyOptions;
+  final List<String> groupOptions;
   final ValueChanged<String> onFacultySelected;
   final ValueChanged<int> onStudyYearSelected;
+  final ValueChanged<String> onGroupSelected;
   final Future<void> Function() onSubmit;
   final VoidCallback onSkip;
 
@@ -54,13 +60,13 @@ class AcademicSetupScreenView extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
                         Text(
-                          'Completeaza profilul academic',
+                          'Configureaza profilul de student',
                           style: Theme.of(context).textTheme.headlineSmall
                               ?.copyWith(fontWeight: FontWeight.w800),
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Aceste date apar in profil si pot fi modificate mai tarziu.',
+                          'Alege facultatea, anul si grupa ca aplicatia sa poata organiza orarul si progresul academic.',
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                         const SizedBox(height: 18),
@@ -113,6 +119,34 @@ class AcademicSetupScreenView extends StatelessWidget {
                           const SizedBox(height: 8),
                           Text(
                             'Selecteaza anul de studiu.',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: colors.error),
+                          ),
+                        ],
+                        const SizedBox(height: 18),
+                        Text(
+                          'Grupa',
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: groupOptions
+                              .map(
+                                (String group) => ChoiceChip(
+                                  label: Text('Grupa $group'),
+                                  selected: selectedGroup == group,
+                                  onSelected: (_) => onGroupSelected(group),
+                                ),
+                              )
+                              .toList(growable: false),
+                        ),
+                        if (selectedGroup == null) ...<Widget>[
+                          const SizedBox(height: 8),
+                          Text(
+                            'Selecteaza grupa.',
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(color: colors.error),
                           ),

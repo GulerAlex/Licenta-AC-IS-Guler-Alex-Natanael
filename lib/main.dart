@@ -10,7 +10,6 @@ import 'package:unihub/models/user_profile.dart';
 import 'package:unihub/screens/functionality/academic_setup_screen.dart';
 import 'package:unihub/screens/functionality/calendar_screen.dart';
 import 'package:unihub/screens/functionality/grades_screen.dart';
-import 'package:unihub/screens/functionality/group_selection_screen.dart';
 import 'package:unihub/screens/functionality/login_screen.dart';
 import 'package:unihub/screens/functionality/profile_screen.dart';
 import 'package:unihub/screens/functionality/schedule_screen.dart';
@@ -204,10 +203,9 @@ class _AuthGatewayState extends State<AuthGateway> {
   final SupabaseClient _supabase = Supabase.instance.client;
 
   bool _isInitialized = false;
-  bool _isResolvingGroup = false;
-  bool _needsAcademicProfileSetup = false;
-  bool _didSkipAcademicProfileSetup = false;
-  String? _selectedGroupCode;
+  bool _isResolvingOnboarding = false;
+  bool _needsOnboarding = false;
+  bool _didSkipOnboarding = false;
   Session? _session;
   StreamSubscription<AuthState>? _authSubscription;
 
@@ -248,9 +246,8 @@ class _AuthGatewayState extends State<AuthGateway> {
       setState(() {
         _session = data.session;
         if (data.session == null) {
-          _selectedGroupCode = null;
-          _needsAcademicProfileSetup = false;
-          _didSkipAcademicProfileSetup = false;
+          _needsOnboarding = false;
+          _didSkipOnboarding = false;
         }
       });
 
@@ -279,9 +276,8 @@ class _AuthGatewayState extends State<AuthGateway> {
         return;
       }
       setState(() {
-        _selectedGroupCode = null;
-        _needsAcademicProfileSetup = false;
-        _didSkipAcademicProfileSetup = false;
+        _needsOnboarding = false;
+        _didSkipOnboarding = false;
       });
       return;
     }
@@ -291,7 +287,7 @@ class _AuthGatewayState extends State<AuthGateway> {
     }
 
     setState(() {
-      _isResolvingGroup = true;
+      _isResolvingOnboarding = true;
     });
 
     try {
@@ -306,10 +302,11 @@ class _AuthGatewayState extends State<AuthGateway> {
         return;
       }
       setState(() {
-        _selectedGroupCode = groupCode;
-        _needsAcademicProfileSetup =
-            !_didSkipAcademicProfileSetup &&
-            (profile.faculty.trim().isEmpty || profile.studyYear == null);
+        _needsOnboarding =
+            !_didSkipOnboarding &&
+            (groupCode == null ||
+                profile.faculty.trim().isEmpty ||
+                profile.studyYear == null);
       });
     } catch (e, stackTrace) {
       _authLog('Onboarding state fetch failed: $e');
@@ -317,72 +314,50 @@ class _AuthGatewayState extends State<AuthGateway> {
       if (!mounted) {
         return;
       }
-      setState(() {
-        _selectedGroupCode = null;
-      });
     } finally {
       if (mounted) {
         setState(() {
-          _isResolvingGroup = false;
+          _isResolvingOnboarding = false;
         });
       }
     }
   }
 
-  Future<bool> _saveGroupSelection(String groupCode) async {
-    _authLog(
-      'Group selection started. group=$groupCode userId=${_supabase.auth.currentUser?.id}',
-    );
-    try {
-      await UniHubRepository.instance.setCurrentGroupCode(groupCode);
-      if (mounted) {
-        setState(() {
-          _selectedGroupCode = groupCode;
-        });
-      }
-      await _refreshOnboardingState();
-      _authLog('Group selection completed successfully for group=$groupCode');
-      return true;
-    } catch (e, stackTrace) {
-      _authLog('Group selection failed: $e');
-      _authLog('Group selection stack: $stackTrace');
-      return false;
-    }
-  }
-
-  Future<bool> _saveAcademicProfileSetup({
+  Future<bool> _saveAcademicOnboarding({
     required String faculty,
     required int studyYear,
+    required String groupCode,
   }) async {
     _authLog(
-      'Academic profile setup started. userId=${_supabase.auth.currentUser?.id}',
+      'Academic onboarding started. userId=${_supabase.auth.currentUser?.id}',
     );
     try {
       await UniHubRepository.instance.setAcademicProfileDetails(
         faculty: faculty,
         studyYear: studyYear,
       );
+      await UniHubRepository.instance.setCurrentGroupCode(groupCode);
       if (mounted) {
         setState(() {
-          _needsAcademicProfileSetup = false;
-          _didSkipAcademicProfileSetup = false;
+          _needsOnboarding = false;
+          _didSkipOnboarding = false;
         });
       }
       await _refreshOnboardingState();
-      _authLog('Academic profile setup completed successfully.');
+      _authLog('Academic onboarding completed successfully.');
       return true;
     } catch (e, stackTrace) {
-      _authLog('Academic profile setup failed: $e');
-      _authLog('Academic profile setup stack: $stackTrace');
+      _authLog('Academic onboarding failed: $e');
+      _authLog('Academic onboarding stack: $stackTrace');
       return false;
     }
   }
 
-  void _skipAcademicProfileSetup() {
-    _authLog('Academic profile setup skipped for current session.');
+  void _skipAcademicOnboarding() {
+    _authLog('Academic onboarding skipped for current session.');
     setState(() {
-      _needsAcademicProfileSetup = false;
-      _didSkipAcademicProfileSetup = true;
+      _needsOnboarding = false;
+      _didSkipOnboarding = true;
     });
   }
 
@@ -515,19 +490,15 @@ class _AuthGatewayState extends State<AuthGateway> {
     }
 
     if (_session != null) {
-      if (_isResolvingGroup) {
+      if (_isResolvingOnboarding) {
         return const Scaffold(body: Center(child: CircularProgressIndicator()));
       }
 
-      if (_needsAcademicProfileSetup) {
+      if (_needsOnboarding) {
         return AcademicSetupScreen(
-          onSaveAcademicDetails: _saveAcademicProfileSetup,
-          onSkip: _skipAcademicProfileSetup,
+          onSaveAcademicOnboarding: _saveAcademicOnboarding,
+          onSkip: _skipAcademicOnboarding,
         );
-      }
-
-      if (_selectedGroupCode == null) {
-        return GroupSelectionScreen(onSaveGroup: _saveGroupSelection);
       }
 
       return UniHubHomePage(onLogout: _logout);

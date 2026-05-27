@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:unihub/data/unihub_repository.dart';
 import 'package:unihub/screens/ui/academic_setup_screen_view.dart';
 
 class AcademicSetupScreen extends StatefulWidget {
   const AcademicSetupScreen({
     super.key,
-    required this.onSaveAcademicDetails,
+    required this.onSaveAcademicOnboarding,
     required this.onSkip,
   });
 
-  final Future<bool> Function({required String faculty, required int studyYear})
-  onSaveAcademicDetails;
+  final Future<bool> Function({
+    required String faculty,
+    required int studyYear,
+    required String groupCode,
+  })
+  onSaveAcademicOnboarding;
   final VoidCallback onSkip;
 
   @override
@@ -30,6 +35,7 @@ class _AcademicSetupScreenState extends State<AcademicSetupScreen> {
   ];
 
   int? _selectedStudyYear;
+  String? _selectedGroup;
   bool _isSaving = false;
 
   @override
@@ -44,7 +50,8 @@ class _AcademicSetupScreenState extends State<AcademicSetupScreen> {
     }
     final bool isFormValid = _formKey.currentState?.validate() ?? false;
     final int? studyYear = _selectedStudyYear;
-    if (!isFormValid || studyYear == null) {
+    final String? group = _selectedGroup;
+    if (!isFormValid || studyYear == null || group == null) {
       setState(() {});
       return;
     }
@@ -53,9 +60,10 @@ class _AcademicSetupScreenState extends State<AcademicSetupScreen> {
       _isSaving = true;
     });
 
-    final bool success = await widget.onSaveAcademicDetails(
+    final bool success = await widget.onSaveAcademicOnboarding(
       faculty: _facultyController.text.trim(),
       studyYear: studyYear,
+      groupCode: group,
     );
     if (!mounted) {
       return;
@@ -85,7 +93,7 @@ class _AcademicSetupScreenState extends State<AcademicSetupScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Profil academic'),
+        title: const Text('Configurare student'),
         actions: <Widget>[
           TextButton(onPressed: widget.onSkip, child: const Text('Mai tarziu')),
         ],
@@ -95,8 +103,10 @@ class _AcademicSetupScreenState extends State<AcademicSetupScreen> {
           formKey: _formKey,
           facultyController: _facultyController,
           selectedStudyYear: _selectedStudyYear,
+          selectedGroup: _selectedGroup,
           isSaving: _isSaving,
           facultyOptions: _facultyOptions,
+          groupOptions: UniHubRepository.availableGroups,
           onFacultySelected: (String faculty) {
             setState(() {
               _facultyController.text = faculty;
@@ -105,6 +115,11 @@ class _AcademicSetupScreenState extends State<AcademicSetupScreen> {
           onStudyYearSelected: (int year) {
             setState(() {
               _selectedStudyYear = year;
+            });
+          },
+          onGroupSelected: (String group) {
+            setState(() {
+              _selectedGroup = group;
             });
           },
           onSubmit: _submit,
