@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:unihub/data/app_preferences_store.dart';
 import 'package:unihub/data/unihub_repository.dart';
-import 'package:unihub/models/course.dart';
+import 'package:unihub/models/academic_event.dart';
+import 'package:unihub/models/academic_subject_v2.dart';
+import 'package:unihub/models/class_session.dart';
+import 'package:unihub/models/grade_component_record.dart';
 import 'package:unihub/models/profile_stats.dart';
 import 'package:unihub/models/user_profile.dart';
 import 'package:unihub/screens/ui/profile_screen_view.dart';
@@ -267,58 +270,102 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return '"${text.replaceAll('"', '""')}"';
   }
 
+  String _weekdayLabel(int weekday) {
+    return switch (weekday) {
+      DateTime.monday => 'Luni',
+      DateTime.tuesday => 'Marti',
+      DateTime.wednesday => 'Miercuri',
+      DateTime.thursday => 'Joi',
+      DateTime.friday => 'Vineri',
+      DateTime.saturday => 'Sambata',
+      DateTime.sunday => 'Duminica',
+      _ => '',
+    };
+  }
+
   Future<void> _exportAcademicData() async {
     try {
-      final List<Course> courses = await _repository.fetchUserCourses();
-      final Map<String, double> grades = await _repository
-          .fetchGradeTypeGrades();
-      final Map<String, double> weights = await _repository
-          .fetchGradeTypeWeights();
+      final List<AcademicSubjectV2> subjects = await _repository
+          .fetchSubjectsV2();
+      final List<ClassSession> sessions = await _repository
+          .fetchClassSessionsV2();
+      final List<GradeComponentRecord> components = await _repository
+          .fetchGradeComponentsV2();
+      final List<AcademicEvent> events = await _repository
+          .fetchAcademicEventsV2(
+            from: DateTime.now().subtract(const Duration(days: 365)),
+            to: DateTime.utc(2030, 12, 31),
+          );
+      final Map<String, AcademicSubjectV2> subjectsById =
+          <String, AcademicSubjectV2>{
+            for (final AcademicSubjectV2 subject in subjects)
+              subject.id: subject,
+          };
 
       final List<String> lines = <String>[
         'type,subject,semester,component,credits,weekday,time,room,professor,value',
-        ...courses.map(
-          (Course course) => <Object?>[
-            'course',
-            course.name,
-            course.semesterLabel,
-            course.courseType,
-            course.credits,
-            course.weekdayLabel,
-            course.time,
-            course.room,
-            course.professor,
+        ...subjects.map(
+          (AcademicSubjectV2 subject) => <Object?>[
+            'subject',
+            subject.name,
+            subject.semesterLabel,
+            '',
+            subject.credits,
+            '',
+            '',
+            '',
+            subject.professor,
             '',
           ].map(_csvValue).join(','),
         ),
-        ...grades.entries.map((MapEntry<String, double> entry) {
-          final List<String> parts = entry.key.split('|');
+        ...sessions.map((ClassSession session) {
+          final AcademicSubjectV2? subject = subjectsById[session.subjectId];
           return <Object?>[
-            'grade',
-            parts.isNotEmpty ? parts.first : '',
-            '',
-            parts.length > 1 ? parts.last : '',
-            '',
-            '',
-            '',
-            '',
-            '',
-            entry.value.toStringAsFixed(0),
+            'class_session',
+            subject?.name ?? '',
+            subject?.semesterLabel ?? '',
+            session.sessionType,
+            subject?.credits ?? '',
+            _weekdayLabel(session.weekday),
+            session.intervalLabel,
+            session.room,
+            session.professor,
+            session.active ? 'active' : 'inactive',
           ].map(_csvValue).join(',');
         }),
-        ...weights.entries.map((MapEntry<String, double> entry) {
-          final List<String> parts = entry.key.split('|');
+        ...components.map((GradeComponentRecord component) {
+          final AcademicSubjectV2? subject = subjectsById[component.subjectId];
           return <Object?>[
-            'weight',
-            parts.isNotEmpty ? parts.first : '',
-            '',
-            parts.length > 1 ? parts.last : '',
-            '',
-            '',
-            '',
+            'grade_component',
+            subject?.name ?? '',
+            subject?.semesterLabel ?? '',
+            component.name,
+            subject?.credits ?? '',
             '',
             '',
-            '${entry.value}%',
+            '',
+            '',
+            component.grade == null
+                ? 'pondere ${component.weightPercent}%'
+                : 'nota ${component.grade!.toStringAsFixed(0)}, pondere ${component.weightPercent}%',
+          ].map(_csvValue).join(',');
+        }),
+        ...events.map((AcademicEvent event) {
+          final AcademicSubjectV2? subject = event.subjectId == null
+              ? null
+              : subjectsById[event.subjectId];
+          final DateTime? eventDate = event.effectiveDate;
+          return <Object?>[
+            'academic_event',
+            subject?.name ?? '',
+            subject?.semesterLabel ?? '',
+            event.type.label,
+            subject?.credits ?? '',
+            eventDate == null ? '' : _weekdayLabel(eventDate.weekday),
+            eventDate == null ? '' : eventDate.toIso8601String(),
+            event.room,
+            '',
+            event.title,
           ].map(_csvValue).join(',');
         }),
       ];

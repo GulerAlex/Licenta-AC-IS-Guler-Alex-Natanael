@@ -1265,162 +1265,52 @@ class UniHubRepository {
   }
 
   Future<ProfileStats> fetchProfileStats({String? semesterLabel}) async {
-    final User? user = _client.auth.currentUser;
-    if (user == null) {
-      throw StateError('No authenticated user');
-    }
+    final List<AcademicSubjectV2> subjectRows = await fetchSubjectsV2();
+    final List<ClassSession> sessions = await fetchClassSessionsV2();
+    final List<GradeComponentRecord> gradeComponents =
+        await fetchGradeComponentsV2();
 
-    final List<dynamic> courseRows = await _client
-        .from('courses')
-        .select('name, semester_label, credits, course_type')
-        .eq('user_id', user.id);
-    final List<dynamic> gradeRows = await _client
-        .from('grade_type_grades')
-        .select('subject_name, course_type, score')
-        .eq('user_id', user.id);
-    final Map<String, double> weights = await fetchGradeTypeWeights();
-
-    final Map<String, List<Map<String, dynamic>>> courseRowsBySubject =
-        <String, List<Map<String, dynamic>>>{};
-    for (final dynamic row in courseRows) {
-      if (row is! Map<String, dynamic>) {
-        continue;
-      }
-      final String subjectName = (row['name'] as String?)?.trim() ?? '';
-      if (subjectName.isEmpty) {
-        continue;
-      }
-      if (semesterLabel != null &&
-          ((row['semester_label'] as String?)?.trim() ?? '') != semesterLabel) {
-        continue;
-      }
-      courseRowsBySubject
-          .putIfAbsent(subjectName, () => <Map<String, dynamic>>[])
-          .add(row);
-    }
-
-    final Map<String, Map<String, double>> gradesBySubject =
-        <String, Map<String, double>>{};
-    for (final dynamic row in gradeRows) {
-      if (row is! Map<String, dynamic>) {
-        continue;
-      }
-
-      final String subjectName = (row['subject_name'] as String?)?.trim() ?? '';
-      if (subjectName.isEmpty) {
-        continue;
-      }
-      if (courseRowsBySubject.isNotEmpty &&
-          !courseRowsBySubject.containsKey(subjectName)) {
-        continue;
-      }
-
-      final String courseType = (row['course_type'] as String?)?.trim() ?? '';
-      if (courseType.isEmpty) {
-        continue;
-      }
-
-      final dynamic scoreRaw = row['score'];
-      final double? score = switch (scoreRaw) {
-        num value => value.toDouble(),
-        String value => double.tryParse(value),
-        _ => null,
-      };
-
-      if (score == null || score < 1 || score > 10) {
-        continue;
-      }
-
-      gradesBySubject.putIfAbsent(
-        subjectName,
-        () => <String, double>{},
-      )[courseType] = score;
-    }
-
-    final List<AcademicSubject> subjects = courseRowsBySubject.entries
-        .map((MapEntry<String, List<Map<String, dynamic>>> entry) {
-          final String subjectName = entry.key;
-          final List<Map<String, dynamic>> rows = entry.value;
-          final int credits = rows.fold<int>(0, (
-            int currentMax,
-            Map<String, dynamic> row,
-          ) {
-            final dynamic creditsRaw = row['credits'];
-            final int parsedCredits = switch (creditsRaw) {
-              int value => value,
-              num value => value.toInt(),
-              String value => int.tryParse(value) ?? 0,
-              _ => 0,
-            };
-            return parsedCredits > currentMax ? parsedCredits : currentMax;
-          });
-          final String semester =
-              (rows.first['semester_label'] as String?)?.trim() ?? '';
-          final Set<String> componentNames = <String>{
-            ...rows
-                .map(
-                  (Map<String, dynamic> row) => _canonicalComponentName(
-                    (row['course_type'] as String?) ?? '',
-                  ),
-                )
-                .where((String value) => value.isNotEmpty),
-            ...(gradesBySubject[subjectName] ?? <String, double>{}).keys.map(
-              _canonicalComponentName,
-            ),
-            ...weights.keys
-                .where((String key) => key.startsWith('$subjectName|'))
-                .map(
-                  (String key) => _canonicalComponentName(key.split('|').last),
-                ),
-          };
-          if (componentNames.isEmpty) {
-            componentNames.add('Examen');
-          }
-          final bool hasConfiguredWeights = componentNames.any(
-            (String componentName) =>
-                (_weightForComponent(
-                      weights: weights,
-                      subjectName: subjectName,
-                      componentName: componentName,
-                    ) ??
-                    0) >
-                0,
+    final List<AcademicSubject> subjects = subjectRows
+        .where(
+          (AcademicSubjectV2 subject) =>
+              semesterLabel == null || subject.semesterLabel == semesterLabel,
+        )
+        .map((AcademicSubjectV2 subject) {
+          final List<GradeComponentRecord> components = _profileComponentsFor(
+            subject: subject,
+            sessions: sessions,
+            gradeComponents: gradeComponents,
           );
-          final double defaultWeight = componentNames.isEmpty
+          final bool hasConfiguredWeights = components.any(
+            (GradeComponentRecord component) => component.weightPercent > 0,
+          );
+          final double defaultWeight = components.isEmpty
               ? 0
-              : 1 / componentNames.length;
-          final Map<String, double> grades =
-              gradesBySubject[subjectName] ?? <String, double>{};
+              : 1 / components.length;
 
           return AcademicSubject(
-            id: subjectName,
-            name: subjectName,
-            semester: semester,
+            id: subject.id,
+            name: subject.name,
+            semester: subject.semesterLabel,
             year: 0,
-            credits: credits,
-            components: componentNames
-                .map((String componentName) {
-                  return GradeComponent(
-                    id: '$subjectName|$componentName',
-                    name: componentName,
-                    type: _componentTypeFromLabel(componentName),
-                    grade: _gradeForComponent(
-                      grades: grades,
-                      componentName: componentName,
-                    ),
+            credits: subject.credits,
+            components: components
+                .map(
+                  (GradeComponentRecord component) => GradeComponent(
+                    id: component.id.isEmpty
+                        ? '${subject.id}|${component.name}'
+                        : component.id,
+                    name: component.name,
+                    type: _componentTypeFromRecord(component.type),
+                    grade: component.grade,
                     weight: hasConfiguredWeights
-                        ? ((_weightForComponent(
-                                    weights: weights,
-                                    subjectName: subjectName,
-                                    componentName: componentName,
-                                  ) ??
-                                  0) /
-                              100)
+                        ? component.weightPercent / 100
                         : defaultWeight,
-                    isRequired: true,
-                    isEliminatory: _isEliminatoryComponent(componentName),
-                  );
-                })
+                    minGrade: component.minimumGrade,
+                    isRequired: component.isRequired,
+                    isEliminatory: component.isEliminatory,
+                  ),
+                )
                 .toList(growable: false),
           );
         })
@@ -1466,6 +1356,83 @@ class UniHubRepository {
     );
   }
 
+  List<GradeComponentRecord> _profileComponentsFor({
+    required AcademicSubjectV2 subject,
+    required List<ClassSession> sessions,
+    required List<GradeComponentRecord> gradeComponents,
+  }) {
+    final Map<String, GradeComponentRecord> byName =
+        <String, GradeComponentRecord>{
+          for (final GradeComponentRecord component in gradeComponents.where(
+            (GradeComponentRecord component) =>
+                component.subjectId == subject.id,
+          ))
+            component.name: component,
+        };
+    byName.putIfAbsent(
+      'Examen',
+      () => _defaultProfileComponent(
+        subjectId: subject.id,
+        componentName: 'Examen',
+      ),
+    );
+    for (final ClassSession session in sessions.where(
+      (ClassSession session) => session.subjectId == subject.id,
+    )) {
+      final String componentName = _canonicalComponentName(session.sessionType);
+      if (componentName.isEmpty || componentName == 'Alta componenta') {
+        continue;
+      }
+      byName.putIfAbsent(
+        componentName,
+        () => _defaultProfileComponent(
+          subjectId: subject.id,
+          componentName: componentName,
+        ),
+      );
+    }
+    return byName.values.toList(growable: false);
+  }
+
+  GradeComponentRecord _defaultProfileComponent({
+    required String subjectId,
+    required String componentName,
+  }) {
+    return GradeComponentRecord(
+      id: '',
+      subjectId: subjectId,
+      name: componentName,
+      type: _componentRecordTypeFromLabel(componentName),
+      weightPercent: 0,
+      minimumGrade: 5,
+      grade: null,
+      isRequired: true,
+      isEliminatory: _isEliminatoryComponent(componentName),
+    );
+  }
+
+  GradeComponentType _componentTypeFromRecord(GradeComponentRecordType type) {
+    return switch (type) {
+      GradeComponentRecordType.exam => GradeComponentType.exam,
+      GradeComponentRecordType.seminar => GradeComponentType.seminar,
+      GradeComponentRecordType.laboratory => GradeComponentType.laboratory,
+      GradeComponentRecordType.project => GradeComponentType.project,
+      GradeComponentRecordType.coursework => GradeComponentType.coursework,
+      GradeComponentRecordType.other => GradeComponentType.other,
+    };
+  }
+
+  GradeComponentRecordType _componentRecordTypeFromLabel(String label) {
+    return switch (label.trim().toLowerCase()) {
+      'curs' || 'examen' => GradeComponentRecordType.exam,
+      'seminar' => GradeComponentRecordType.seminar,
+      'laborator' => GradeComponentRecordType.laboratory,
+      'proiect' => GradeComponentRecordType.project,
+      'activitate pe parcurs' => GradeComponentRecordType.coursework,
+      _ => GradeComponentRecordType.other,
+    };
+  }
+
   GradeComponentType _componentTypeFromLabel(String label) {
     return switch (label.trim().toLowerCase()) {
       'curs' || 'examen' => GradeComponentType.exam,
@@ -1492,23 +1459,6 @@ class UniHubRepository {
       GradeComponentType.project => true,
       _ => false,
     };
-  }
-
-  double? _gradeForComponent({
-    required Map<String, double> grades,
-    required String componentName,
-  }) {
-    return grades[componentName] ??
-        (componentName == 'Examen' ? grades['Curs'] : null);
-  }
-
-  double? _weightForComponent({
-    required Map<String, double> weights,
-    required String subjectName,
-    required String componentName,
-  }) {
-    return weights['$subjectName|$componentName'] ??
-        (componentName == 'Examen' ? weights['$subjectName|Curs'] : null);
   }
 
   String _standingLabel(AcademicStanding standing) {
