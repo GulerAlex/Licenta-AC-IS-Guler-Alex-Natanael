@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
 import 'package:unihub/screens/ui/noise_overlay.dart';
 import 'dart:ui' as ui;
 
@@ -165,7 +164,7 @@ class _SignUpScreenViewState extends State<SignUpScreenView>
           left: 16,
           child: Container(
             decoration: BoxDecoration(
-              color: colors.primary.withOpacity(0.15),
+              color: colors.primary.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(12),
             ),
             child: IconButton(
@@ -205,20 +204,24 @@ class _SignUpScreenViewState extends State<SignUpScreenView>
                                   end: Alignment.bottomRight,
                                   colors: [
                                     colors.primary,
-                                    colors.secondary.withOpacity(0.9),
-                                    colors.tertiary.withOpacity(0.8),
+                                    colors.secondary.withValues(alpha: 0.9),
+                                    colors.tertiary.withValues(alpha: 0.8),
                                   ],
                                 ),
                                 borderRadius: BorderRadius.circular(24),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: colors.primary.withOpacity(0.5),
+                                    color: colors.primary.withValues(
+                                      alpha: 0.5,
+                                    ),
                                     blurRadius: 25,
                                     offset: const Offset(0, 10),
                                     spreadRadius: 2,
                                   ),
                                   BoxShadow(
-                                    color: colors.secondary.withOpacity(0.3),
+                                    color: colors.secondary.withValues(
+                                      alpha: 0.3,
+                                    ),
                                     blurRadius: 15,
                                     offset: const Offset(-5, 5),
                                   ),
@@ -257,9 +260,9 @@ class _SignUpScreenViewState extends State<SignUpScreenView>
                                 begin: Alignment.centerLeft,
                                 end: Alignment.centerRight,
                                 colors: [
-                                  colors.primary.withOpacity(0.3),
+                                  colors.primary.withValues(alpha: 0.3),
                                   colors.secondary,
-                                  colors.tertiary.withOpacity(0.3),
+                                  colors.tertiary.withValues(alpha: 0.3),
                                 ],
                               ),
                               borderRadius: BorderRadius.circular(2),
@@ -296,27 +299,31 @@ class _SignUpScreenViewState extends State<SignUpScreenView>
                           child: Container(
                             decoration: BoxDecoration(
                               color: isDark
-                                  ? colors.surface.withOpacity(0.85)
-                                  : Colors.white.withOpacity(0.85),
+                                  ? colors.surface.withValues(alpha: 0.85)
+                                  : Colors.white.withValues(alpha: 0.85),
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
-                                color: colors.primary.withOpacity(0.25),
+                                color: colors.primary.withValues(alpha: 0.25),
                                 width: 2,
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: colors.primary.withOpacity(0.15),
+                                  color: colors.primary.withValues(alpha: 0.15),
                                   blurRadius: 30,
                                   offset: const Offset(0, 12),
                                   spreadRadius: 2,
                                 ),
                                 BoxShadow(
-                                  color: colors.secondary.withOpacity(0.08),
+                                  color: colors.secondary.withValues(
+                                    alpha: 0.08,
+                                  ),
                                   blurRadius: 20,
                                   offset: const Offset(8, 8),
                                 ),
                                 BoxShadow(
-                                  color: colors.tertiary.withOpacity(0.06),
+                                  color: colors.tertiary.withValues(
+                                    alpha: 0.06,
+                                  ),
                                   blurRadius: 15,
                                   offset: const Offset(-6, 6),
                                 ),
@@ -455,9 +462,9 @@ class _SignUpScreenViewState extends State<SignUpScreenView>
                             begin: Alignment.centerLeft,
                             end: Alignment.centerRight,
                             colors: [
-                              colors.primary.withOpacity(0.2),
+                              colors.primary.withValues(alpha: 0.2),
                               colors.secondary,
-                              colors.tertiary.withOpacity(0.2),
+                              colors.tertiary.withValues(alpha: 0.2),
                             ],
                           ),
                           borderRadius: BorderRadius.circular(1.5),
@@ -497,12 +504,12 @@ class _SignUpScreenViewState extends State<SignUpScreenView>
           boxShadow: isFocused
               ? [
                   BoxShadow(
-                    color: colors.primary.withOpacity(0.3),
+                    color: colors.primary.withValues(alpha: 0.3),
                     blurRadius: 12,
                     spreadRadius: 2,
                   ),
                   BoxShadow(
-                    color: colors.secondary.withOpacity(0.15),
+                    color: colors.secondary.withValues(alpha: 0.15),
                     blurRadius: 8,
                     spreadRadius: 1,
                   ),
@@ -521,7 +528,7 @@ class _SignUpScreenViewState extends State<SignUpScreenView>
               size: 20,
               color: isFocused
                   ? colors.primary
-                  : colors.primary.withOpacity(0.7),
+                  : colors.primary.withValues(alpha: 0.7),
             ),
             suffixIcon: isPasswordField
                 ? MouseRegion(
@@ -537,7 +544,7 @@ class _SignUpScreenViewState extends State<SignUpScreenView>
                           size: 20,
                           color: isFocused
                               ? colors.secondary
-                              : colors.secondary.withOpacity(0.7),
+                              : colors.secondary.withValues(alpha: 0.7),
                         ),
                       ),
                     ),
@@ -545,19 +552,19 @@ class _SignUpScreenViewState extends State<SignUpScreenView>
                 : null,
             filled: true,
             fillColor: isFocused
-                ? colors.primary.withOpacity(0.12)
-                : colors.primary.withOpacity(0.08),
+                ? colors.primary.withValues(alpha: 0.12)
+                : colors.primary.withValues(alpha: 0.08),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(
-                color: colors.primary.withOpacity(0.2),
+                color: colors.primary.withValues(alpha: 0.2),
                 width: 1.5,
               ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(
-                color: colors.secondary.withOpacity(0.15),
+                color: colors.secondary.withValues(alpha: 0.15),
                 width: 1.5,
               ),
             ),
@@ -568,7 +575,7 @@ class _SignUpScreenViewState extends State<SignUpScreenView>
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(
-                color: colors.error.withOpacity(0.5),
+                color: colors.error.withValues(alpha: 0.5),
                 width: 1,
               ),
             ),
@@ -614,21 +621,23 @@ class _SignUpScreenViewState extends State<SignUpScreenView>
               end: Alignment.bottomRight,
               colors: [
                 colors.primary,
-                colors.secondary.withOpacity(0.85),
-                colors.primary.withOpacity(0.9),
+                colors.secondary.withValues(alpha: 0.85),
+                colors.primary.withValues(alpha: 0.9),
               ],
               stops: const [0.0, 0.5, 1.0],
             ),
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
-                color: colors.primary.withOpacity(isHovered ? 0.6 : 0.5),
+                color: colors.primary.withValues(alpha: isHovered ? 0.6 : 0.5),
                 blurRadius: isHovered ? 24 : 18,
                 offset: const Offset(0, 6),
                 spreadRadius: isHovered ? 3 : 2,
               ),
               BoxShadow(
-                color: colors.secondary.withOpacity(isHovered ? 0.3 : 0.2),
+                color: colors.secondary.withValues(
+                  alpha: isHovered ? 0.3 : 0.2,
+                ),
                 blurRadius: isHovered ? 14 : 10,
                 offset: const Offset(-4, 2),
               ),
@@ -660,7 +669,7 @@ class _SignUpScreenViewState extends State<SignUpScreenView>
                               child: CircularProgressIndicator(
                                 strokeWidth: 2.5,
                                 valueColor: AlwaysStoppedAnimation<Color>(
-                                  Colors.white.withOpacity(0.6),
+                                  Colors.white.withValues(alpha: 0.6),
                                 ),
                               ),
                             ),
@@ -669,10 +678,10 @@ class _SignUpScreenViewState extends State<SignUpScreenView>
                               width: 8,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: Colors.white.withOpacity(0.8),
+                                color: Colors.white.withValues(alpha: 0.8),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.white.withOpacity(0.4),
+                                    color: Colors.white.withValues(alpha: 0.4),
                                     blurRadius: 4,
                                   ),
                                 ],

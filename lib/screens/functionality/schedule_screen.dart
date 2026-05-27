@@ -1074,7 +1074,7 @@ class _ExamEventDialogState extends State<_ExamEventDialog> {
                   )
                 else
                   const Text(
-                    'Nu ai materii in schema noua. Poti salva evenimentul fara materie.',
+                    'Nu ai materii adaugate inca. Poti salva examenul fara materie si il poti lega mai tarziu.',
                   ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<AcademicEventType>(
