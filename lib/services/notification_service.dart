@@ -6,8 +6,6 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:unihub/models/academic_event.dart';
 import 'package:unihub/models/academic_subject_v2.dart';
 import 'package:unihub/models/class_session.dart';
-import 'package:unihub/models/course.dart';
-import 'package:unihub/models/exam_event.dart';
 
 class NotificationService {
   NotificationService._();
@@ -72,37 +70,6 @@ class NotificationService {
     return androidGranted ?? iosGranted ?? true;
   }
 
-  // Legacy reminder API kept for backwards-compatible migration/debug paths.
-  // Normal screens schedule notifications through rescheduleAcademicRemindersV2.
-  Future<void> rescheduleAcademicReminders({
-    required List<Course> courses,
-    required List<ExamEvent> exams,
-    required Set<String> hiddenScheduleSemesters,
-    required bool courseNotificationsEnabled,
-    required bool examNotificationsEnabled,
-    required int courseReminderMinutes,
-  }) async {
-    if (kIsWeb) {
-      return;
-    }
-    await initialize();
-    await _cancelAcademicReminders();
-
-    final DateTime now = DateTime.now();
-    if (courseNotificationsEnabled) {
-      await _scheduleCourseReminders(
-        courses: courses,
-        hiddenScheduleSemesters: hiddenScheduleSemesters,
-        now: now,
-        reminderMinutes: courseReminderMinutes,
-      );
-    }
-
-    if (examNotificationsEnabled) {
-      await _scheduleExamReminders(exams: exams, now: now);
-    }
-  }
-
   Future<void> rescheduleAcademicRemindersV2({
     required List<AcademicSubjectV2> subjects,
     required List<ClassSession> classSessions,
@@ -159,91 +126,6 @@ class NotificationService {
       if ((id >= _courseNotificationStart && id <= _courseNotificationEnd) ||
           (id >= _examNotificationStart && id <= _examNotificationEnd)) {
         await _plugin.cancel(id: id);
-      }
-    }
-  }
-
-  Future<void> _scheduleCourseReminders({
-    required List<Course> courses,
-    required Set<String> hiddenScheduleSemesters,
-    required DateTime now,
-    required int reminderMinutes,
-  }) async {
-    final DateTime today = DateTime(now.year, now.month, now.day);
-    int index = 0;
-
-    for (final Course course in courses) {
-      if (hiddenScheduleSemesters.contains(course.semesterLabel) ||
-          course.time.trim().isEmpty) {
-        continue;
-      }
-
-      final int? weekday = _weekdayFromLabel(course.weekdayLabel);
-      final int? startMinutes = _startMinutesFromTimeLabel(course.time);
-      if (weekday == null || startMinutes == null) {
-        continue;
-      }
-
-      for (int dayOffset = 0; dayOffset < _scheduleDaysAhead; dayOffset++) {
-        final DateTime day = today.add(Duration(days: dayOffset));
-        if (day.weekday != weekday) {
-          continue;
-        }
-
-        final DateTime courseStart = day.add(Duration(minutes: startMinutes));
-        final DateTime reminderAt = courseStart.subtract(
-          Duration(minutes: reminderMinutes),
-        );
-        if (!reminderAt.isAfter(now)) {
-          continue;
-        }
-
-        await _schedule(
-          id: _courseNotificationStart + index,
-          title: '${course.courseType} in curand',
-          body:
-              '${course.name} incepe la ${_formatTime(courseStart)}'
-              '${course.room.trim().isEmpty ? '' : ' in ${course.room.trim()}'}',
-          scheduledAt: reminderAt,
-          payload: 'course:${course.name}',
-        );
-        index += 1;
-        if (_courseNotificationStart + index > _courseNotificationEnd) {
-          return;
-        }
-      }
-    }
-  }
-
-  Future<void> _scheduleExamReminders({
-    required List<ExamEvent> exams,
-    required DateTime now,
-  }) async {
-    int index = 0;
-    for (final ExamEvent exam in exams) {
-      if (!exam.notificationsEnabled || !exam.startsAt.isAfter(now)) {
-        continue;
-      }
-
-      final DateTime reminderAt = exam.startsAt.subtract(
-        Duration(minutes: exam.reminderMinutesBefore),
-      );
-      if (!reminderAt.isAfter(now)) {
-        continue;
-      }
-
-      await _schedule(
-        id: _examNotificationStart + index,
-        title: '${exam.examType} in curand',
-        body:
-            '${exam.subjectName} incepe la ${_formatTime(exam.startsAt)}'
-            '${exam.room.trim().isEmpty ? '' : ' in ${exam.room.trim()}'}',
-        scheduledAt: reminderAt,
-        payload: 'exam:${exam.id}',
-      );
-      index += 1;
-      if (_examNotificationStart + index > _examNotificationEnd) {
-        return;
       }
     }
   }
@@ -381,40 +263,6 @@ class NotificationService {
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       payload: payload,
     );
-  }
-
-  int? _weekdayFromLabel(String label) {
-    return switch (label.trim()) {
-      'Luni' => DateTime.monday,
-      'Marti' => DateTime.tuesday,
-      'Miercuri' => DateTime.wednesday,
-      'Joi' => DateTime.thursday,
-      'Vineri' => DateTime.friday,
-      'Sambata' => DateTime.saturday,
-      'Duminica' => DateTime.sunday,
-      _ => null,
-    };
-  }
-
-  int? _startMinutesFromTimeLabel(String value) {
-    final RegExpMatch? match = RegExp(
-      r'(\d{1,2})\s*:\s*(\d{2})',
-    ).firstMatch(value);
-    if (match == null) {
-      return null;
-    }
-
-    final int? hour = int.tryParse(match.group(1) ?? '');
-    final int? minute = int.tryParse(match.group(2) ?? '');
-    if (hour == null ||
-        minute == null ||
-        hour < 0 ||
-        hour > 23 ||
-        minute < 0 ||
-        minute > 59) {
-      return null;
-    }
-    return (hour * 60) + minute;
   }
 
   String _formatTime(DateTime value) {
