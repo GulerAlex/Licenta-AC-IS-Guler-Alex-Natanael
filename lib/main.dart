@@ -13,7 +13,7 @@ import 'package:unihub/screens/functionality/grades_screen.dart';
 import 'package:unihub/screens/functionality/group_selection_screen.dart';
 import 'package:unihub/screens/functionality/login_screen.dart';
 import 'package:unihub/screens/functionality/profile_screen.dart';
-import 'package:unihub/screens/functionality/resources_screen.dart';
+import 'package:unihub/screens/functionality/schedule_screen.dart';
 import 'package:unihub/screens/functionality/signup_screen.dart';
 import 'package:unihub/screens/functionality/today_screen.dart';
 import 'package:unihub/screens/ui/noise_overlay.dart';
@@ -592,7 +592,7 @@ class _UniHubHomePageState extends State<UniHubHomePage> {
 
   List<Widget> get _screens => <Widget>[
     const TodayScreen(),
-    const ResourcesScreen(),
+    const ScheduleScreen(),
     const CalendarScreen(),
     GradesScreen(
       academicDataVersion: _academicDataVersion,

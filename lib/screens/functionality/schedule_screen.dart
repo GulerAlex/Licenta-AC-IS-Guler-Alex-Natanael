@@ -12,23 +12,23 @@ import 'package:unihub/models/academic_event.dart';
 import 'package:unihub/models/academic_subject_v2.dart';
 import 'package:unihub/models/class_session.dart';
 import 'package:unihub/models/schedule_item.dart';
-import 'package:unihub/screens/ui/resources_screen_view.dart';
+import 'package:unihub/screens/ui/schedule_screen_view.dart';
 import 'package:unihub/services/notification_service.dart';
 
-class ResourcesScreen extends StatefulWidget {
-  const ResourcesScreen({super.key});
+class ScheduleScreen extends StatefulWidget {
+  const ScheduleScreen({super.key});
 
   @override
-  State<ResourcesScreen> createState() => _ResourcesScreenState();
+  State<ScheduleScreen> createState() => _ScheduleScreenState();
 }
 
-class _ResourcesScreenState extends State<ResourcesScreen> {
+class _ScheduleScreenState extends State<ScheduleScreen> {
   final UniHubRepository _repository = UniHubRepository.instance;
   final AppPreferencesStore _preferences = AppPreferencesStore.instance;
   final NotificationService _notificationService = NotificationService.instance;
   final ScheduleVisibilityStore _visibilityStore =
       ScheduleVisibilityStore.instance;
-  static const String _notesStorageKey = 'resources_notes_by_day';
+  static const String _legacyNotesStorageKey = 'resources_notes_by_day';
   static const String _deleteNoteAction = '@@DELETE@@';
   late DateTime _focusedDay;
   late DateTime _selectedDay;
@@ -38,7 +38,7 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
   List<ClassSession> _classSessions = <ClassSession>[];
   List<AcademicEvent> _academicEvents = <AcademicEvent>[];
   Set<String> _hiddenScheduleSemesters = <String>{};
-  bool _isLoadingCourses = false;
+  bool _isLoadingSchedule = false;
   bool _hasLoadError = false;
   RealtimeChannel? _scheduleRealtimeChannel;
   RealtimeChannel? _notesRealtimeChannel;
@@ -166,7 +166,7 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
     }
 
     final RealtimeChannel channel = Supabase.instance.client
-        .channel('resource-notes-user-${user.id}')
+        .channel('schedule-notes-user-${user.id}')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
@@ -187,7 +187,7 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
 
   Future<void> _loadNotes() async {
     try {
-      final Map<String, String> notes = await _repository.fetchResourceNotes();
+      final Map<String, String> notes = await _repository.fetchScheduleNotes();
       if (!mounted) {
         return;
       }
@@ -195,13 +195,13 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
         _notesByDay = notes;
       });
     } catch (e) {
-      debugPrint('Failed to load resource notes: $e');
+      debugPrint('Failed to load schedule notes: $e');
     }
   }
 
   Future<void> _migrateLocalNotesIfNeeded() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    final String? raw = prefs.getString(_notesStorageKey);
+    final String? raw = prefs.getString(_legacyNotesStorageKey);
     if (raw == null || raw.isEmpty) {
       return;
     }
@@ -225,10 +225,10 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
     }
 
     try {
-      await _repository.upsertResourceNotes(parsed);
-      await prefs.remove(_notesStorageKey);
+      await _repository.upsertScheduleNotes(parsed);
+      await prefs.remove(_legacyNotesStorageKey);
     } catch (e) {
-      debugPrint('Failed to migrate resource notes: $e');
+      debugPrint('Failed to migrate schedule notes: $e');
     }
   }
 
@@ -246,8 +246,8 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
     });
   }
 
-  int _sessionTypeOrder(String courseType) {
-    return switch (courseType) {
+  int _sessionTypeOrder(String sessionType) {
+    return switch (sessionType) {
       'Curs' => 0,
       'Seminar' => 1,
       'Laborator' => 2,
@@ -293,7 +293,7 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
     });
 
     try {
-      await _repository.setResourceNote(dateKey: key, noteText: normalized);
+      await _repository.setScheduleNote(dateKey: key, noteText: normalized);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -315,7 +315,7 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
     });
 
     try {
-      await _repository.deleteResourceNote(dateKey: key);
+      await _repository.deleteScheduleNote(dateKey: key);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -382,7 +382,7 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
   Future<void> _syncScheduleFromSupabase({required bool showLoader}) async {
     if (showLoader && mounted) {
       setState(() {
-        _isLoadingCourses = true;
+        _isLoadingSchedule = true;
         _hasLoadError = false;
       });
     }
@@ -406,7 +406,7 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
         _subjects = subjects;
         _classSessions = sessions;
         _academicEvents = events;
-        _isLoadingCourses = false;
+        _isLoadingSchedule = false;
         _hasLoadError = false;
       });
       unawaited(_rescheduleNotifications());
@@ -415,7 +415,7 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
         return;
       }
       setState(() {
-        _isLoadingCourses = false;
+        _isLoadingSchedule = false;
         _hasLoadError = true;
       });
     }
@@ -670,7 +670,7 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
     final List<ScheduleClassItem> dailyClasses = _classesForDay(_selectedDay);
     final List<ScheduleEventItem> dailyEvents = _eventsForDay(_selectedDay);
 
-    return ResourcesScreenView(
+    return ScheduleScreenView(
       focusedDay: _focusedDay,
       selectedDay: _selectedDay,
       firstVisibleDay: _startOfCurrentWeek(),
@@ -706,7 +706,7 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
       courseNotificationsEnabled: _preferences.courseNotificationsEnabled,
       examNotificationsEnabled: _preferences.examNotificationsEnabled,
       onRefresh: _reload,
-      connectionState: _isLoadingCourses
+      connectionState: _isLoadingSchedule
           ? ConnectionState.waiting
           : ConnectionState.done,
       hasError: _hasLoadError,

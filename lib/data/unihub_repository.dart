@@ -35,7 +35,7 @@ class UniHubRepository {
     academicDataVersion.value += 1;
   }
 
-  Future<Map<String, String>> fetchResourceNotes() async {
+  Future<Map<String, String>> fetchScheduleNotes() async {
     final User? user = _client.auth.currentUser;
     if (user == null) {
       throw StateError('No authenticated user');
@@ -73,7 +73,7 @@ class UniHubRepository {
     return notes;
   }
 
-  Future<void> setResourceNote({
+  Future<void> setScheduleNote({
     required String dateKey,
     required String noteText,
   }) async {
@@ -104,7 +104,7 @@ class UniHubRepository {
     }, onConflict: 'user_id,note_date');
   }
 
-  Future<void> deleteResourceNote({required String dateKey}) async {
+  Future<void> deleteScheduleNote({required String dateKey}) async {
     final User? user = _client.auth.currentUser;
     if (user == null) {
       throw StateError('No authenticated user');
@@ -122,7 +122,7 @@ class UniHubRepository {
         .eq('note_date', normalizedDate);
   }
 
-  Future<void> upsertResourceNotes(Map<String, String> notesByDay) async {
+  Future<void> upsertScheduleNotes(Map<String, String> notesByDay) async {
     final User? user = _client.auth.currentUser;
     if (user == null) {
       throw StateError('No authenticated user');

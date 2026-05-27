@@ -5,8 +5,8 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:unihub/models/academic_event.dart';
 import 'package:unihub/models/schedule_item.dart';
 
-class ResourcesScreenView extends StatelessWidget {
-  const ResourcesScreenView({
+class ScheduleScreenView extends StatelessWidget {
+  const ScheduleScreenView({
     super.key,
     required this.focusedDay,
     required this.selectedDay,
@@ -81,7 +81,7 @@ class ResourcesScreenView extends StatelessWidget {
                   child: Center(child: CircularProgressIndicator()),
                 )
               else if (hasError)
-                ResourcesLoadError(onRetry: onRetry)
+                ScheduleLoadError(onRetry: onRetry)
               else ...<Widget>[
                 _GlassCard(
                   colors: colors,
@@ -146,11 +146,11 @@ class ResourcesScreenView extends StatelessWidget {
                                   markerColors.add(colors.tertiary);
                                 }
 
-                                final int maxCourseDots =
+                                final int maxScheduleDots =
                                     3 - markerColors.length;
                                 for (
                                   int i = 0;
-                                  i < eventCount && i < maxCourseDots;
+                                  i < eventCount && i < maxScheduleDots;
                                   i++
                                 ) {
                                   markerColors.add(colors.primary);
@@ -595,8 +595,8 @@ class _ClassSessionCard extends StatelessWidget {
   }
 }
 
-class ResourcesLoadError extends StatelessWidget {
-  const ResourcesLoadError({super.key, required this.onRetry});
+class ScheduleLoadError extends StatelessWidget {
+  const ScheduleLoadError({super.key, required this.onRetry});
 
   final VoidCallback onRetry;
 
