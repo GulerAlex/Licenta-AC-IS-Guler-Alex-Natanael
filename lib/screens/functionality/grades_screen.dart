@@ -909,6 +909,26 @@ class _GradesScreenState extends State<GradesScreen> {
     return weightedSum / creditsWithGrades;
   }
 
+  List<SemesterAverageData> _semesterAverages(List<SubjectNoteCardData> cards) {
+    return UniHubRepository.availableSemesters
+        .map((String semesterLabel) {
+          final List<SubjectNoteCardData> semesterCards = cards
+              .where(
+                (SubjectNoteCardData card) =>
+                    card.evaluation.subject.semester == semesterLabel,
+              )
+              .toList(growable: false);
+
+          return SemesterAverageData(
+            semesterLabel: semesterLabel,
+            totalCredits: _totalCredits(semesterCards),
+            earnedCredits: _earnedCredits(semesterCards),
+            average: _weightedAverage(semesterCards),
+          );
+        })
+        .toList(growable: false);
+  }
+
   void _changeSelectedSubject(String subject) {
     if (subject == _selectedSubject) {
       return;
@@ -953,6 +973,7 @@ class _GradesScreenState extends State<GradesScreen> {
           totalCredits: _totalCredits(subjectCards),
           earnedCredits: _earnedCredits(subjectCards),
           weightedAverage: _weightedAverage(subjectCards),
+          semesterAverages: _semesterAverages(subjectCards),
           onRefresh: _reload,
           allSubjectsValue: _allSubjectsValue,
           selectedSubject: selectedSubject,

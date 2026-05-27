@@ -12,6 +12,20 @@ class SubjectNoteCardData {
   final SubjectEvaluation evaluation;
 }
 
+class SemesterAverageData {
+  const SemesterAverageData({
+    required this.semesterLabel,
+    required this.totalCredits,
+    required this.earnedCredits,
+    required this.average,
+  });
+
+  final String semesterLabel;
+  final int totalCredits;
+  final int earnedCredits;
+  final double? average;
+}
+
 class GradesScreenView extends StatefulWidget {
   const GradesScreenView({
     super.key,
@@ -19,6 +33,7 @@ class GradesScreenView extends StatefulWidget {
     required this.totalCredits,
     required this.earnedCredits,
     required this.weightedAverage,
+    required this.semesterAverages,
     required this.onRefresh,
     required this.allSubjectsValue,
     required this.selectedSubject,
@@ -34,6 +49,7 @@ class GradesScreenView extends StatefulWidget {
   final int totalCredits;
   final int earnedCredits;
   final double? weightedAverage;
+  final List<SemesterAverageData> semesterAverages;
   final Future<void> Function() onRefresh;
   final String allSubjectsValue;
   final String selectedSubject;
@@ -176,6 +192,63 @@ class _GradesScreenViewState extends State<GradesScreenView> {
                     ),
                   ],
                 ),
+                if (widget.semesterAverages.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 12),
+                  LayoutBuilder(
+                    builder: (BuildContext context, BoxConstraints constraints) {
+                      final bool compact = constraints.maxWidth < 390;
+                      final List<Widget> metrics = <Widget>[
+                        ...widget.semesterAverages.map(
+                          (SemesterAverageData data) => _SummaryMetric(
+                            label: data.semesterLabel,
+                            value: data.average == null
+                                ? '-'
+                                : data.average!.toStringAsFixed(2),
+                            supportingText:
+                                '${data.earnedCredits}/${data.totalCredits} credite',
+                            colors: colors,
+                          ),
+                        ),
+                        _SummaryMetric(
+                          label: 'Media anuala',
+                          value: widget.weightedAverage == null
+                              ? '-'
+                              : widget.weightedAverage!.toStringAsFixed(2),
+                          supportingText:
+                              '${widget.earnedCredits}/${widget.totalCredits} credite',
+                          colors: colors,
+                        ),
+                      ];
+
+                      if (compact) {
+                        return Column(
+                          children: metrics
+                              .map(
+                                (Widget metric) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: metric,
+                                ),
+                              )
+                              .toList(growable: false),
+                        );
+                      }
+
+                      return Row(
+                        children: <Widget>[
+                          for (int index = 0; index < metrics.length; index++)
+                            Expanded(
+                              child: Padding(
+                                padding: EdgeInsets.only(
+                                  right: index == metrics.length - 1 ? 0 : 8,
+                                ),
+                                child: metrics[index],
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
                 const SizedBox(height: 12),
                 Text(
                   'Nota minima de promovare este 5. Creditele se obtin integral doar pentru materiile promovate.',
@@ -579,11 +652,13 @@ class _SummaryMetric extends StatelessWidget {
     required this.label,
     required this.value,
     required this.colors,
+    this.supportingText,
   });
 
   final String label;
   final String value;
   final ColorScheme colors;
+  final String? supportingText;
 
   @override
   Widget build(BuildContext context) {
@@ -612,6 +687,16 @@ class _SummaryMetric extends StatelessWidget {
               fontWeight: FontWeight.w800,
             ),
           ),
+          if (supportingText != null) ...<Widget>[
+            const SizedBox(height: 2),
+            Text(
+              supportingText!,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: colors.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ],
       ),
     );
