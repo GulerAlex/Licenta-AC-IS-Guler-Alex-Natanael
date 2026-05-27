@@ -10,16 +10,16 @@ class CalendarScreenView extends StatefulWidget {
     required this.isUpdatingSemesterVisibility,
     required this.onSemesterChanged,
     required this.onScheduleVisibilityChanged,
-    required this.onAddCourse,
-    required this.onDeleteCourse,
+    required this.onAddSubject,
+    required this.onDeleteSubject,
     required this.onSubjectTap,
-    required this.onEditCourseType,
-    required this.onDeleteCourseType,
-    required this.isAddingCourse,
-    required this.isDeletingCourse,
-    required this.isEditingCourseType,
-    required this.isDeletingCourseType,
-    required this.pendingTimeLabel,
+    required this.onEditActivity,
+    required this.onDeleteActivity,
+    required this.isAddingSubject,
+    required this.isDeletingSubject,
+    required this.isEditingActivity,
+    required this.isDeletingActivity,
+    required this.pendingEntryTimeLabel,
     required this.onRefresh,
     required this.connectionState,
     required this.hasError,
@@ -32,18 +32,18 @@ class CalendarScreenView extends StatefulWidget {
   final bool isUpdatingSemesterVisibility;
   final ValueChanged<String> onSemesterChanged;
   final ValueChanged<bool> onScheduleVisibilityChanged;
-  final Future<void> Function() onAddCourse;
-  final Future<void> Function() onDeleteCourse;
+  final Future<void> Function() onAddSubject;
+  final Future<void> Function() onDeleteSubject;
   final ValueChanged<String> onSubjectTap;
   final Future<void> Function(String subjectName, SubjectScheduleEntry entry)
-  onEditCourseType;
+  onEditActivity;
   final Future<void> Function(String subjectName, SubjectScheduleEntry entry)
-  onDeleteCourseType;
-  final bool isAddingCourse;
-  final bool isDeletingCourse;
-  final bool isEditingCourseType;
-  final bool isDeletingCourseType;
-  final String pendingTimeLabel;
+  onDeleteActivity;
+  final bool isAddingSubject;
+  final bool isDeletingSubject;
+  final bool isEditingActivity;
+  final bool isDeletingActivity;
+  final String pendingEntryTimeLabel;
   final Future<void> Function() onRefresh;
   final ConnectionState connectionState;
   final bool hasError;
@@ -92,7 +92,7 @@ class _CalendarScreenViewState extends State<CalendarScreenView> {
                   padding: const EdgeInsets.only(top: 48),
                   child: Center(
                     child: Text(
-                      'Nu exista cursuri pentru acest semestru.',
+                      'Nu exista materii pentru acest semestru.',
                       style: Theme.of(context).textTheme.bodyLarge,
                     ),
                   ),
@@ -102,13 +102,13 @@ class _CalendarScreenViewState extends State<CalendarScreenView> {
                   (MapEntry<String, List<SubjectScheduleEntry>> entry) =>
                       _SubjectCard(
                         subjectName: entry.key,
-                        courses: entry.value,
-                        pendingTimeLabel: widget.pendingTimeLabel,
+                        entries: entry.value,
+                        pendingEntryTimeLabel: widget.pendingEntryTimeLabel,
                         onTap: () => widget.onSubjectTap(entry.key),
-                        onEditCourseType: widget.onEditCourseType,
-                        onDeleteCourseType: widget.onDeleteCourseType,
-                        isEditingCourseType: widget.isEditingCourseType,
-                        isDeletingCourseType: widget.isDeletingCourseType,
+                        onEditActivity: widget.onEditActivity,
+                        onDeleteActivity: widget.onDeleteActivity,
+                        isEditingActivity: widget.isEditingActivity,
+                        isDeletingActivity: widget.isDeletingActivity,
                       ),
                 ),
             ],
@@ -122,9 +122,12 @@ class _CalendarScreenViewState extends State<CalendarScreenView> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: colors.primary.withOpacity(0.08),
+        color: colors.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: colors.primary.withOpacity(0.15), width: 1.5),
+        border: Border.all(
+          color: colors.primary.withValues(alpha: 0.15),
+          width: 1.5,
+        ),
       ),
       child: SegmentedButton<String>(
         segments: const <ButtonSegment<String>>[
@@ -153,10 +156,10 @@ class _CalendarScreenViewState extends State<CalendarScreenView> {
         child: Container(
           padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
           decoration: BoxDecoration(
-            color: colors.primary.withOpacity(0.08),
+            color: colors.primary.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: colors.primary.withOpacity(0.15),
+              color: colors.primary.withValues(alpha: 0.15),
               width: 1.2,
             ),
           ),
@@ -165,7 +168,7 @@ class _CalendarScreenViewState extends State<CalendarScreenView> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: colors.primary.withOpacity(0.14),
+                  color: colors.primary.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
@@ -225,13 +228,16 @@ class _CalendarScreenViewState extends State<CalendarScreenView> {
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [colors.primary, colors.secondary.withOpacity(0.9)],
+                  colors: [
+                    colors.primary,
+                    colors.secondary.withValues(alpha: 0.9),
+                  ],
                 ),
                 borderRadius: BorderRadius.circular(14),
                 boxShadow: [
                   BoxShadow(
-                    color: colors.primary.withOpacity(
-                      _addButtonHovered ? 0.4 : 0.2,
+                    color: colors.primary.withValues(
+                      alpha: _addButtonHovered ? 0.4 : 0.2,
                     ),
                     blurRadius: _addButtonHovered ? 20 : 12,
                     offset: const Offset(0, 8),
@@ -242,7 +248,7 @@ class _CalendarScreenViewState extends State<CalendarScreenView> {
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  onTap: widget.isAddingCourse ? null : widget.onAddCourse,
+                  onTap: widget.isAddingSubject ? null : widget.onAddSubject,
                   borderRadius: BorderRadius.circular(14),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
@@ -255,7 +261,7 @@ class _CalendarScreenViewState extends State<CalendarScreenView> {
                         Icon(Icons.add_rounded, color: Colors.white, size: 20),
                         const SizedBox(width: 8),
                         Text(
-                          widget.isAddingCourse
+                          widget.isAddingSubject
                               ? 'Se adauga...'
                               : 'Adauga materie',
                           style: Theme.of(context).textTheme.labelLarge
@@ -284,15 +290,15 @@ class _CalendarScreenViewState extends State<CalendarScreenView> {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    colors.error.withOpacity(0.9),
-                    colors.error.withOpacity(0.7),
+                    colors.error.withValues(alpha: 0.9),
+                    colors.error.withValues(alpha: 0.7),
                   ],
                 ),
                 borderRadius: BorderRadius.circular(14),
                 boxShadow: [
                   BoxShadow(
-                    color: colors.error.withOpacity(
-                      _deleteButtonHovered ? 0.3 : 0.15,
+                    color: colors.error.withValues(
+                      alpha: _deleteButtonHovered ? 0.3 : 0.15,
                     ),
                     blurRadius: _deleteButtonHovered ? 18 : 10,
                     offset: const Offset(0, 8),
@@ -303,7 +309,9 @@ class _CalendarScreenViewState extends State<CalendarScreenView> {
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  onTap: widget.isDeletingCourse ? null : widget.onDeleteCourse,
+                  onTap: widget.isDeletingSubject
+                      ? null
+                      : widget.onDeleteSubject,
                   borderRadius: BorderRadius.circular(14),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
@@ -320,7 +328,7 @@ class _CalendarScreenViewState extends State<CalendarScreenView> {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          widget.isDeletingCourse
+                          widget.isDeletingSubject
                               ? 'Se sterge...'
                               : 'Sterge materie',
                           style: Theme.of(context).textTheme.labelLarge
@@ -354,7 +362,7 @@ class CalendarLoadError extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          const Text('Nu s-au putut incarca cursurile.'),
+          const Text('Nu s-au putut incarca materiile.'),
           const SizedBox(height: 12),
           FilledButton(onPressed: onRetry, child: const Text('Reincearca')),
         ],
@@ -366,25 +374,25 @@ class CalendarLoadError extends StatelessWidget {
 class _SubjectCard extends StatefulWidget {
   const _SubjectCard({
     required this.subjectName,
-    required this.courses,
-    required this.pendingTimeLabel,
+    required this.entries,
+    required this.pendingEntryTimeLabel,
     required this.onTap,
-    required this.onEditCourseType,
-    required this.onDeleteCourseType,
-    required this.isEditingCourseType,
-    required this.isDeletingCourseType,
+    required this.onEditActivity,
+    required this.onDeleteActivity,
+    required this.isEditingActivity,
+    required this.isDeletingActivity,
   });
 
   final String subjectName;
-  final List<SubjectScheduleEntry> courses;
-  final String pendingTimeLabel;
+  final List<SubjectScheduleEntry> entries;
+  final String pendingEntryTimeLabel;
   final VoidCallback onTap;
   final Future<void> Function(String subjectName, SubjectScheduleEntry entry)
-  onEditCourseType;
+  onEditActivity;
   final Future<void> Function(String subjectName, SubjectScheduleEntry entry)
-  onDeleteCourseType;
-  final bool isEditingCourseType;
-  final bool isDeletingCourseType;
+  onDeleteActivity;
+  final bool isEditingActivity;
+  final bool isDeletingActivity;
 
   @override
   State<_SubjectCard> createState() => _SubjectCardState();
@@ -396,14 +404,14 @@ class _SubjectCardState extends State<_SubjectCard> {
   @override
   Widget build(BuildContext context) {
     final ColorScheme colors = Theme.of(context).colorScheme;
-    final List<SubjectScheduleEntry> detailedCourses = widget.courses
+    final List<SubjectScheduleEntry> detailedEntries = widget.entries
         .where(
-          (SubjectScheduleEntry course) =>
-              course.time != widget.pendingTimeLabel,
+          (SubjectScheduleEntry entry) =>
+              entry.time != widget.pendingEntryTimeLabel,
         )
         .toList(growable: false);
-    final int subjectCredits = widget.courses.isNotEmpty
-        ? widget.courses.first.credits
+    final int subjectCredits = widget.entries.isNotEmpty
+        ? widget.entries.first.credits
         : 5;
 
     return Padding(
@@ -421,18 +429,20 @@ class _SubjectCardState extends State<_SubjectCard> {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    colors.primary.withOpacity(0.12),
-                    colors.secondary.withOpacity(0.08),
+                    colors.primary.withValues(alpha: 0.12),
+                    colors.secondary.withValues(alpha: 0.08),
                   ],
                 ),
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(
-                  color: colors.primary.withOpacity(0.2),
+                  color: colors.primary.withValues(alpha: 0.2),
                   width: 1.5,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: colors.primary.withOpacity(_isHovered ? 0.25 : 0.12),
+                    color: colors.primary.withValues(
+                      alpha: _isHovered ? 0.25 : 0.12,
+                    ),
                     blurRadius: _isHovered ? 20 : 10,
                     offset: Offset(0, _isHovered ? 12 : 6),
                     spreadRadius: _isHovered ? 2 : 0,
@@ -468,8 +478,8 @@ class _SubjectCardState extends State<_SubjectCard> {
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
                                   colors: [
-                                    colors.primary.withOpacity(0.3),
-                                    colors.secondary.withOpacity(0.2),
+                                    colors.primary.withValues(alpha: 0.3),
+                                    colors.secondary.withValues(alpha: 0.2),
                                   ],
                                 ),
                                 borderRadius: BorderRadius.circular(8),
@@ -492,9 +502,9 @@ class _SubjectCardState extends State<_SubjectCard> {
                           ],
                         ),
                         const SizedBox(height: 12),
-                        if (detailedCourses.isEmpty)
+                        if (detailedEntries.isEmpty)
                           Text(
-                            'Apasa pentru a adauga tipul, ziua, ora, sala si profesorul.',
+                            'Apasa pentru a adauga activitatea, ziua, ora, sala si profesorul.',
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(
                                   color: colors.onSurfaceVariant,
@@ -502,8 +512,8 @@ class _SubjectCardState extends State<_SubjectCard> {
                                 ),
                           )
                         else
-                          ...detailedCourses.map(
-                            (SubjectScheduleEntry course) => Padding(
+                          ...detailedEntries.map(
+                            (SubjectScheduleEntry entry) => Padding(
                               padding: const EdgeInsets.only(bottom: 10),
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -516,14 +526,18 @@ class _SubjectCardState extends State<_SubjectCard> {
                                     decoration: BoxDecoration(
                                       gradient: LinearGradient(
                                         colors: [
-                                          colors.secondary.withOpacity(0.4),
-                                          colors.tertiary.withOpacity(0.3),
+                                          colors.secondary.withValues(
+                                            alpha: 0.4,
+                                          ),
+                                          colors.tertiary.withValues(
+                                            alpha: 0.3,
+                                          ),
                                         ],
                                       ),
                                       borderRadius: BorderRadius.circular(6),
                                     ),
                                     child: Text(
-                                      course.sessionType,
+                                      entry.sessionType,
                                       style: Theme.of(context)
                                           .textTheme
                                           .labelSmall
@@ -539,7 +553,7 @@ class _SubjectCardState extends State<_SubjectCard> {
                                           CrossAxisAlignment.start,
                                       children: <Widget>[
                                         Text(
-                                          '${course.weekdayLabel} • ${course.time} • ${course.room}',
+                                          '${entry.weekdayLabel} | ${entry.time} | ${entry.room}',
                                           style: Theme.of(context)
                                               .textTheme
                                               .bodySmall
@@ -549,7 +563,7 @@ class _SubjectCardState extends State<_SubjectCard> {
                                         ),
                                         const SizedBox(height: 2),
                                         Text(
-                                          course.professor,
+                                          entry.professor,
                                           style: Theme.of(context)
                                               .textTheme
                                               .bodySmall
@@ -561,11 +575,11 @@ class _SubjectCardState extends State<_SubjectCard> {
                                     ),
                                   ),
                                   IconButton(
-                                    onPressed: widget.isEditingCourseType
+                                    onPressed: widget.isEditingActivity
                                         ? null
-                                        : () => widget.onEditCourseType(
+                                        : () => widget.onEditActivity(
                                             widget.subjectName,
-                                            course,
+                                            entry,
                                           ),
                                     icon: Icon(
                                       Icons.edit_rounded,
@@ -579,11 +593,11 @@ class _SubjectCardState extends State<_SubjectCard> {
                                     ),
                                   ),
                                   IconButton(
-                                    onPressed: widget.isDeletingCourseType
+                                    onPressed: widget.isDeletingActivity
                                         ? null
-                                        : () => widget.onDeleteCourseType(
+                                        : () => widget.onDeleteActivity(
                                             widget.subjectName,
-                                            course,
+                                            entry,
                                           ),
                                     icon: Icon(
                                       Icons.delete_rounded,

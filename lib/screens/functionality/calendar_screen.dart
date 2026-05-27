@@ -30,7 +30,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     'Sambata',
     'Duminica',
   ];
-  static const List<String> _courseTypeOptions = <String>[
+  static const List<String> _activityTypeOptions = <String>[
     'Curs',
     'Seminar',
     'Laborator',
@@ -38,10 +38,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   String _selectedSemester = 'Semestrul 2';
   late Future<List<SubjectScheduleEntry>> _scheduleEntriesFuture;
-  bool _isAddingCourse = false;
-  bool _isDeletingCourse = false;
-  bool _isDeletingCourseType = false;
-  bool _isEditingCourseType = false;
+  bool _isAddingSubject = false;
+  bool _isDeletingSubject = false;
+  bool _isDeletingActivity = false;
+  bool _isEditingActivity = false;
   bool _isUpdatingSemesterVisibility = false;
   Set<String> _hiddenScheduleSemesters = <String>{};
   RealtimeChannel? _academicScheduleRealtimeChannel;
@@ -241,27 +241,26 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return null;
   }
 
-  ClassSession _classSessionFromCourse({
-    required SubjectScheduleEntry course,
+  ClassSession _classSessionFromEntry({
+    required SubjectScheduleEntry entry,
     required String subjectId,
     required String sessionId,
   }) {
-    final int startsAtMinutes =
-        _parseStartMinutesFromInterval(course.time) ?? 0;
+    final int startsAtMinutes = _parseStartMinutesFromInterval(entry.time) ?? 0;
     final int endsAtMinutes =
-        _parseEndMinutesFromInterval(course.time) ?? (startsAtMinutes + 60);
+        _parseEndMinutesFromInterval(entry.time) ?? (startsAtMinutes + 60);
     final int normalizedEndsAtMinutes = endsAtMinutes
         .clamp(startsAtMinutes + 1, 1439)
         .toInt();
     return ClassSession(
       id: sessionId,
       subjectId: subjectId,
-      sessionType: course.sessionType,
-      weekday: _weekdayNumberFromLabel(course.weekdayLabel),
+      sessionType: entry.sessionType,
+      weekday: _weekdayNumberFromLabel(entry.weekdayLabel),
       startsAtMinutes: startsAtMinutes,
       endsAtMinutes: normalizedEndsAtMinutes,
-      room: course.room,
-      professor: course.professor,
+      room: entry.room,
+      professor: entry.professor,
       active: true,
     );
   }
@@ -353,8 +352,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return (hour * 60) + minute;
   }
 
-  bool _isPendingCourse(SubjectScheduleEntry course) {
-    return course.time == UniHubRepository.pendingCourseTimeLabel;
+  bool _isPendingEntry(SubjectScheduleEntry entry) {
+    return entry.time == UniHubRepository.pendingCourseTimeLabel;
   }
 
   Future<bool> _subjectExistsForSemester({
@@ -372,8 +371,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  Future<void> _openAddCourseDialog() async {
-    if (_isAddingCourse) {
+  Future<void> _openAddSubjectDialog() async {
+    if (_isAddingSubject) {
       return;
     }
 
@@ -392,7 +391,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
 
     setState(() {
-      _isAddingCourse = true;
+      _isAddingSubject = true;
     });
 
     try {
@@ -446,13 +445,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
       }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Nu am putut adauga cursul. Incearca din nou.'),
+          content: Text('Nu am putut adauga materia. Incearca din nou.'),
         ),
       );
     } finally {
       if (mounted) {
         setState(() {
-          _isAddingCourse = false;
+          _isAddingSubject = false;
         });
       }
     }
@@ -473,29 +472,29 @@ class _CalendarScreenState extends State<CalendarScreen> {
       return;
     }
 
-    final SubjectScheduleEntry? detailedCourse =
+    final SubjectScheduleEntry? activityDraft =
         await showDialog<SubjectScheduleEntry>(
           context: context,
           builder: (BuildContext dialogContext) {
-            return _AddCourseDetailsDialog(
+            return _ActivityDetailsDialog(
               subjectName: subjectName,
               semesterLabel: _selectedSemester,
               subjectCredits: subject.credits,
               weekdayOptions: _weekdayOptions,
-              courseTypeOptions: _courseTypeOptions,
+              activityTypeOptions: _activityTypeOptions,
               sortOrderFromTime: _sortOrderFromTime,
             );
           },
         );
 
-    if (!mounted || detailedCourse == null) {
+    if (!mounted || activityDraft == null) {
       return;
     }
 
     try {
       await _repository.upsertClassSessionV2(
-        _classSessionFromCourse(
-          course: detailedCourse,
+        _classSessionFromEntry(
+          entry: activityDraft,
           subjectId: subject.id,
           sessionId: '',
         ),
@@ -510,29 +509,29 @@ class _CalendarScreenState extends State<CalendarScreen> {
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Detaliile au fost adaugate.')),
+        const SnackBar(content: Text('Activitatea a fost adaugata.')),
       );
     } catch (_) {
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nu am putut salva detaliile.')),
+        const SnackBar(content: Text('Nu am putut salva activitatea.')),
       );
     }
   }
 
-  Future<void> _openDeleteCourseDialog() async {
-    if (_isDeletingCourse) {
+  Future<void> _openDeleteSubjectDialog() async {
+    if (_isDeletingSubject) {
       return;
     }
 
-    final List<SubjectScheduleEntry> semesterCourses =
+    final List<SubjectScheduleEntry> semesterEntries =
         await _loadEntriesForSemester(_selectedSemester);
 
     final List<String> subjects =
-        semesterCourses
-            .map((SubjectScheduleEntry course) => course.name.trim())
+        semesterEntries
+            .map((SubjectScheduleEntry entry) => entry.name.trim())
             .where((String name) => name.isNotEmpty)
             .toSet()
             .toList(growable: false)
@@ -565,7 +564,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
 
     setState(() {
-      _isDeletingCourse = true;
+      _isDeletingSubject = true;
     });
 
     try {
@@ -601,17 +600,17 @@ class _CalendarScreenState extends State<CalendarScreen> {
     } finally {
       if (mounted) {
         setState(() {
-          _isDeletingCourse = false;
+          _isDeletingSubject = false;
         });
       }
     }
   }
 
-  Future<void> _deleteCourseType(
+  Future<void> _deleteActivity(
     String subjectName,
-    SubjectScheduleEntry course,
+    SubjectScheduleEntry entry,
   ) async {
-    if (_isDeletingCourseType) {
+    if (_isDeletingActivity) {
       return;
     }
 
@@ -620,9 +619,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
           context: context,
           builder: (BuildContext dialogContext) {
             return AlertDialog(
-              title: const Text('Sterge tipul de curs'),
+              title: const Text('Sterge activitatea'),
               content: Text(
-                'Stergi ${course.sessionType} (${course.weekdayLabel}, ${course.time}) de la materia $subjectName?',
+                'Stergi ${entry.sessionType} (${entry.weekdayLabel}, ${entry.time}) de la materia $subjectName?',
               ),
               actions: <Widget>[
                 TextButton(
@@ -644,14 +643,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
 
     setState(() {
-      _isDeletingCourseType = true;
+      _isDeletingActivity = true;
     });
 
     try {
-      if (course.sessionId.trim().isEmpty) {
+      if (entry.sessionId.trim().isEmpty) {
         throw StateError('Class session id missing.');
       }
-      await _repository.deleteClassSessionV2(course.sessionId);
+      await _repository.deleteClassSessionV2(entry.sessionId);
 
       if (!mounted) {
         return;
@@ -662,68 +661,68 @@ class _CalendarScreenState extends State<CalendarScreen> {
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tipul de curs a fost sters din tabela.')),
+        const SnackBar(content: Text('Activitatea a fost stearsa.')),
       );
     } catch (_) {
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nu am putut sterge tipul de curs.')),
+        const SnackBar(content: Text('Nu am putut sterge activitatea.')),
       );
     } finally {
       if (mounted) {
         setState(() {
-          _isDeletingCourseType = false;
+          _isDeletingActivity = false;
         });
       }
     }
   }
 
-  Future<void> _editCourseType(
+  Future<void> _editActivity(
     String subjectName,
-    SubjectScheduleEntry course,
+    SubjectScheduleEntry entry,
   ) async {
-    if (_isEditingCourseType) {
+    if (_isEditingActivity) {
       return;
     }
 
-    final SubjectScheduleEntry? updatedCourse =
+    final SubjectScheduleEntry? updatedEntry =
         await showDialog<SubjectScheduleEntry>(
           context: context,
           builder: (BuildContext dialogContext) {
-            return _AddCourseDetailsDialog(
+            return _ActivityDetailsDialog(
               subjectName: subjectName,
               semesterLabel: _selectedSemester,
-              subjectCredits: course.credits,
+              subjectCredits: entry.credits,
               weekdayOptions: _weekdayOptions,
-              courseTypeOptions: _courseTypeOptions,
+              activityTypeOptions: _activityTypeOptions,
               sortOrderFromTime: _sortOrderFromTime,
-              initialCourse: course,
+              initialEntry: entry,
               submitButtonLabel: 'Salveaza modificarile',
             );
           },
         );
 
-    if (!mounted || updatedCourse == null) {
+    if (!mounted || updatedEntry == null) {
       return;
     }
 
     setState(() {
-      _isEditingCourseType = true;
+      _isEditingActivity = true;
     });
 
     try {
-      final String subjectId = course.subjectId.trim().isNotEmpty
-          ? course.subjectId
-          : updatedCourse.subjectId;
-      final String sessionId = course.sessionId;
+      final String subjectId = entry.subjectId.trim().isNotEmpty
+          ? entry.subjectId
+          : updatedEntry.subjectId;
+      final String sessionId = entry.sessionId;
       if (subjectId.trim().isEmpty || sessionId.trim().isEmpty) {
         throw StateError('Class session identity missing.');
       }
       await _repository.upsertClassSessionV2(
-        _classSessionFromCourse(
-          course: updatedCourse,
+        _classSessionFromEntry(
+          entry: updatedEntry,
           subjectId: subjectId,
           sessionId: sessionId,
         ),
@@ -738,26 +737,26 @@ class _CalendarScreenState extends State<CalendarScreen> {
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tipul de curs a fost actualizat.')),
+        const SnackBar(content: Text('Activitatea a fost actualizata.')),
       );
     } catch (_) {
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nu am putut actualiza tipul de curs.')),
+        const SnackBar(content: Text('Nu am putut actualiza activitatea.')),
       );
     } finally {
       if (mounted) {
         setState(() {
-          _isEditingCourseType = false;
+          _isEditingActivity = false;
         });
       }
     }
   }
 
-  int _courseTypeOrder(String courseType) {
-    return switch (courseType) {
+  int _activityTypeOrder(String activityType) {
+    return switch (activityType) {
       'Curs' => 0,
       'Seminar' => 1,
       'Laborator' => 2,
@@ -774,25 +773,25 @@ class _CalendarScreenState extends State<CalendarScreen> {
             BuildContext context,
             AsyncSnapshot<List<SubjectScheduleEntry>> snapshot,
           ) {
-            final List<SubjectScheduleEntry> courses =
+            final List<SubjectScheduleEntry> entries =
                 snapshot.data ?? <SubjectScheduleEntry>[];
-            final Map<String, List<SubjectScheduleEntry>> groupedCourses =
+            final Map<String, List<SubjectScheduleEntry>> groupedEntries =
                 <String, List<SubjectScheduleEntry>>{};
 
-            for (final SubjectScheduleEntry course in courses) {
-              groupedCourses
-                  .putIfAbsent(course.name, () => <SubjectScheduleEntry>[])
-                  .add(course);
+            for (final SubjectScheduleEntry entry in entries) {
+              groupedEntries
+                  .putIfAbsent(entry.name, () => <SubjectScheduleEntry>[])
+                  .add(entry);
             }
 
-            for (final List<SubjectScheduleEntry> subjectCourses
-                in groupedCourses.values) {
-              subjectCourses.sort((
+            for (final List<SubjectScheduleEntry> subjectEntries
+                in groupedEntries.values) {
+              subjectEntries.sort((
                 SubjectScheduleEntry a,
                 SubjectScheduleEntry b,
               ) {
-                final bool aPending = _isPendingCourse(a);
-                final bool bPending = _isPendingCourse(b);
+                final bool aPending = _isPendingEntry(a);
+                final bool bPending = _isPendingEntry(b);
                 if (aPending != bPending) {
                   return aPending ? 1 : -1;
                 }
@@ -800,9 +799,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 if (a.sortOrder != b.sortOrder) {
                   return a.sortOrder.compareTo(b.sortOrder);
                 }
-                return _courseTypeOrder(
+                return _activityTypeOrder(
                   a.sessionType,
-                ).compareTo(_courseTypeOrder(b.sessionType));
+                ).compareTo(_activityTypeOrder(b.sessionType));
               });
             }
 
@@ -814,20 +813,20 @@ class _CalendarScreenState extends State<CalendarScreen> {
               onSemesterChanged: _changeSemester,
               onScheduleVisibilityChanged:
                   _setSelectedSemesterScheduleVisibility,
-              onAddCourse: _openAddCourseDialog,
-              onDeleteCourse: _openDeleteCourseDialog,
+              onAddSubject: _openAddSubjectDialog,
+              onDeleteSubject: _openDeleteSubjectDialog,
               onSubjectTap: _openAddDetailsDialog,
-              onEditCourseType: _editCourseType,
-              onDeleteCourseType: _deleteCourseType,
-              isAddingCourse: _isAddingCourse,
-              isDeletingCourse: _isDeletingCourse,
-              isEditingCourseType: _isEditingCourseType,
-              isDeletingCourseType: _isDeletingCourseType,
-              pendingTimeLabel: UniHubRepository.pendingCourseTimeLabel,
+              onEditActivity: _editActivity,
+              onDeleteActivity: _deleteActivity,
+              isAddingSubject: _isAddingSubject,
+              isDeletingSubject: _isDeletingSubject,
+              isEditingActivity: _isEditingActivity,
+              isDeletingActivity: _isDeletingActivity,
+              pendingEntryTimeLabel: UniHubRepository.pendingCourseTimeLabel,
               onRefresh: _reload,
               connectionState: snapshot.connectionState,
               hasError: snapshot.hasError,
-              subjectEntries: groupedCourses.entries.toList(growable: false),
+              subjectEntries: groupedEntries.entries.toList(growable: false),
               onRetry: _reload,
             );
           },
@@ -973,15 +972,15 @@ class _AddSubjectDialogState extends State<_AddSubjectDialog> {
   }
 }
 
-class _AddCourseDetailsDialog extends StatefulWidget {
-  const _AddCourseDetailsDialog({
+class _ActivityDetailsDialog extends StatefulWidget {
+  const _ActivityDetailsDialog({
     required this.subjectName,
     required this.semesterLabel,
     required this.subjectCredits,
     required this.weekdayOptions,
-    required this.courseTypeOptions,
+    required this.activityTypeOptions,
     required this.sortOrderFromTime,
-    this.initialCourse,
+    this.initialEntry,
     this.submitButtonLabel = 'Salveaza',
   });
 
@@ -989,17 +988,16 @@ class _AddCourseDetailsDialog extends StatefulWidget {
   final String semesterLabel;
   final int subjectCredits;
   final List<String> weekdayOptions;
-  final List<String> courseTypeOptions;
+  final List<String> activityTypeOptions;
   final int Function(String value) sortOrderFromTime;
-  final SubjectScheduleEntry? initialCourse;
+  final SubjectScheduleEntry? initialEntry;
   final String submitButtonLabel;
 
   @override
-  State<_AddCourseDetailsDialog> createState() =>
-      _AddCourseDetailsDialogState();
+  State<_ActivityDetailsDialog> createState() => _ActivityDetailsDialogState();
 }
 
-class _AddCourseDetailsDialogState extends State<_AddCourseDetailsDialog> {
+class _ActivityDetailsDialogState extends State<_ActivityDetailsDialog> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _roomController = TextEditingController();
   final TextEditingController _startTimeController = TextEditingController();
@@ -1007,22 +1005,22 @@ class _AddCourseDetailsDialogState extends State<_AddCourseDetailsDialog> {
   final TextEditingController _professorController = TextEditingController();
 
   late String _selectedWeekday;
-  late String _selectedCourseType;
+  late String _selectedActivityType;
 
   @override
   void initState() {
     super.initState();
-    final SubjectScheduleEntry? initialCourse = widget.initialCourse;
+    final SubjectScheduleEntry? initialEntry = widget.initialEntry;
     _selectedWeekday =
-        initialCourse?.weekdayLabel ?? widget.weekdayOptions.first;
-    _selectedCourseType =
-        initialCourse?.sessionType ?? widget.courseTypeOptions.first;
-    _roomController.text = initialCourse?.room ?? '';
-    _professorController.text = initialCourse?.professor ?? '';
+        initialEntry?.weekdayLabel ?? widget.weekdayOptions.first;
+    _selectedActivityType =
+        initialEntry?.sessionType ?? widget.activityTypeOptions.first;
+    _roomController.text = initialEntry?.room ?? '';
+    _professorController.text = initialEntry?.professor ?? '';
 
     final RegExpMatch? timeMatch = RegExp(
       r'^(\d{1,2})\s*:\s*(\d{2})\s*-\s*(\d{1,2})\s*:\s*(\d{2})$',
-    ).firstMatch((initialCourse?.time ?? '').trim());
+    ).firstMatch((initialEntry?.time ?? '').trim());
     if (timeMatch != null) {
       final int? startHour = int.tryParse(timeMatch.group(1) ?? '');
       final int? startMinute = int.tryParse(timeMatch.group(2) ?? '');
@@ -1299,27 +1297,27 @@ class _AddCourseDetailsDialogState extends State<_AddCourseDetailsDialog> {
     final String intervalLabel =
         '${_formatMinutes(startMinutes)} - ${_formatMinutes(endMinutes)}';
 
-    final SubjectScheduleEntry course = SubjectScheduleEntry(
+    final SubjectScheduleEntry entry = SubjectScheduleEntry(
       name: widget.subjectName,
       semesterLabel: widget.semesterLabel,
-      credits: widget.initialCourse?.credits ?? widget.subjectCredits,
-      sessionType: _selectedCourseType,
+      credits: widget.initialEntry?.credits ?? widget.subjectCredits,
+      sessionType: _selectedActivityType,
       weekdayLabel: _selectedWeekday,
       time: intervalLabel,
       room: _roomController.text.trim(),
       professor: _professorController.text.trim(),
       sortOrder: widget.sortOrderFromTime(intervalLabel),
-      subjectId: widget.initialCourse?.subjectId ?? '',
-      sessionId: widget.initialCourse?.sessionId ?? '',
+      subjectId: widget.initialEntry?.subjectId ?? '',
+      sessionId: widget.initialEntry?.sessionId ?? '',
     );
 
-    Navigator.of(context).pop<SubjectScheduleEntry>(course);
+    Navigator.of(context).pop<SubjectScheduleEntry>(entry);
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Adauga detalii curs'),
+      title: const Text('Adauga activitate'),
       content: SingleChildScrollView(
         child: SizedBox(
           width: 460,
@@ -1344,9 +1342,11 @@ class _AddCourseDetailsDialogState extends State<_AddCourseDetailsDialog> {
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
-                  initialValue: _selectedCourseType,
-                  decoration: const InputDecoration(labelText: 'Tip curs'),
-                  items: widget.courseTypeOptions
+                  initialValue: _selectedActivityType,
+                  decoration: const InputDecoration(
+                    labelText: 'Tip activitate',
+                  ),
+                  items: widget.activityTypeOptions
                       .map(
                         (String type) => DropdownMenuItem<String>(
                           value: type,
@@ -1359,7 +1359,7 @@ class _AddCourseDetailsDialogState extends State<_AddCourseDetailsDialog> {
                       return;
                     }
                     setState(() {
-                      _selectedCourseType = value;
+                      _selectedActivityType = value;
                     });
                   },
                 ),
