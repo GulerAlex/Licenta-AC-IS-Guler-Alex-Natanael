@@ -550,35 +550,35 @@ class _UniHubHomePageState extends State<UniHubHomePage> {
   final AppPreferencesStore _preferences = AppPreferencesStore.instance;
   final UniHubRepository _repository = UniHubRepository.instance;
   late PersistentTabController _controller;
-  late int _coursesVersion;
+  late int _academicDataVersion;
 
   @override
   void initState() {
     super.initState();
-    _coursesVersion = _repository.coursesVersion.value;
+    _academicDataVersion = _repository.academicDataVersion.value;
     _controller = PersistentTabController(initialIndex: 0);
     _controller.addListener(() {
       setState(() {});
     });
-    _repository.coursesVersion.addListener(_handleCoursesChanged);
+    _repository.academicDataVersion.addListener(_handleAcademicDataChanged);
     _preferences.addListener(_handlePreferencesChanged);
   }
 
   @override
   void dispose() {
-    _repository.coursesVersion.removeListener(_handleCoursesChanged);
+    _repository.academicDataVersion.removeListener(_handleAcademicDataChanged);
     _preferences.removeListener(_handlePreferencesChanged);
     _controller.dispose();
     super.dispose();
   }
 
-  void _handleCoursesChanged() {
+  void _handleAcademicDataChanged() {
     if (!mounted) {
       return;
     }
 
     setState(() {
-      _coursesVersion = _repository.coursesVersion.value;
+      _academicDataVersion = _repository.academicDataVersion.value;
     });
   }
 
@@ -595,7 +595,7 @@ class _UniHubHomePageState extends State<UniHubHomePage> {
     const ResourcesScreen(),
     const CalendarScreen(),
     GradesScreen(
-      coursesVersion: _coursesVersion,
+      academicDataVersion: _academicDataVersion,
       isActive: _controller.index == 3,
     ),
     ProfileScreen(

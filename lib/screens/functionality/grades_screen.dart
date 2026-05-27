@@ -15,11 +15,11 @@ import 'package:unihub/screens/ui/grades_screen_view.dart';
 class GradesScreen extends StatefulWidget {
   const GradesScreen({
     super.key,
-    required this.coursesVersion,
+    required this.academicDataVersion,
     required this.isActive,
   });
 
-  final int coursesVersion;
+  final int academicDataVersion;
   final bool isActive;
 
   @override
@@ -56,16 +56,16 @@ class _GradesScreenState extends State<GradesScreen> {
     _subscribeToSubjectsRealtime();
     _subscribeToSessionsRealtime();
     _subscribeToComponentsRealtime();
-    _repository.coursesVersion.addListener(_handleCoursesChanged);
+    _repository.academicDataVersion.addListener(_handleAcademicDataChanged);
     unawaited(_migrateLocalGradesIfNeeded());
   }
 
   @override
   void didUpdateWidget(covariant GradesScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.coursesVersion != widget.coursesVersion ||
+    if (oldWidget.academicDataVersion != widget.academicDataVersion ||
         (!oldWidget.isActive && widget.isActive)) {
-      _refreshCourses();
+      _refreshAcademicData();
     }
   }
 
@@ -83,15 +83,15 @@ class _GradesScreenState extends State<GradesScreen> {
     if (componentsChannel != null) {
       Supabase.instance.client.removeChannel(componentsChannel);
     }
-    _repository.coursesVersion.removeListener(_handleCoursesChanged);
+    _repository.academicDataVersion.removeListener(_handleAcademicDataChanged);
     super.dispose();
   }
 
-  void _handleCoursesChanged() {
-    _refreshCourses();
+  void _handleAcademicDataChanged() {
+    _refreshAcademicData();
   }
 
-  void _refreshCourses() {
+  void _refreshAcademicData() {
     if (!mounted) {
       return;
     }
@@ -149,7 +149,7 @@ class _GradesScreenState extends State<GradesScreen> {
             value: user.id,
           ),
           callback: (PostgresChangePayload _) {
-            _refreshCourses();
+            _refreshAcademicData();
           },
         )
         .subscribe();
@@ -175,7 +175,7 @@ class _GradesScreenState extends State<GradesScreen> {
             value: user.id,
           ),
           callback: (PostgresChangePayload _) {
-            _refreshCourses();
+            _refreshAcademicData();
           },
         )
         .subscribe();
@@ -322,7 +322,7 @@ class _GradesScreenState extends State<GradesScreen> {
         }
       }
       await prefs.remove(_notesStorageKey());
-      _refreshCourses();
+      _refreshAcademicData();
     } catch (e) {
       debugPrint('Failed to migrate local grades: $e');
     }
@@ -465,7 +465,7 @@ class _GradesScreenState extends State<GradesScreen> {
       await _repository.upsertGradeComponentV2(
         _componentWithGrade(component, value),
       );
-      _refreshCourses();
+      _refreshAcademicData();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -495,7 +495,7 @@ class _GradesScreenState extends State<GradesScreen> {
           _componentWithWeight(component, weightsByType[componentName] ?? 0),
         );
       }
-      _refreshCourses();
+      _refreshAcademicData();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

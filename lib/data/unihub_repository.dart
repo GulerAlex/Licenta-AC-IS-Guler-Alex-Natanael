@@ -16,7 +16,7 @@ class UniHubRepository {
   UniHubRepository._();
 
   static final UniHubRepository instance = UniHubRepository._();
-  final ValueNotifier<int> coursesVersion = ValueNotifier<int>(0);
+  final ValueNotifier<int> academicDataVersion = ValueNotifier<int>(0);
   static const String pendingCourseTimeLabel = '__PENDING__';
   static const List<String> availableGroups = <String>[
     '1.1',
@@ -33,8 +33,8 @@ class UniHubRepository {
 
   SupabaseClient get _client => Supabase.instance.client;
 
-  void _notifyCoursesChanged() {
-    coursesVersion.value += 1;
+  void _notifyAcademicDataChanged() {
+    academicDataVersion.value += 1;
   }
 
   // Legacy academic API kept only for one-time migration from the old schema.
@@ -108,7 +108,7 @@ class UniHubRepository {
       'professor': course.professor,
       'sort_order': course.sortOrder,
     });
-    _notifyCoursesChanged();
+    _notifyAcademicDataChanged();
   }
 
   Future<void> addCourseSubject({
@@ -154,7 +154,7 @@ class UniHubRepository {
       'professor': '-',
       'sort_order': 9999,
     });
-    _notifyCoursesChanged();
+    _notifyAcademicDataChanged();
   }
 
   Future<void> clearPendingCourseDraft({
@@ -173,7 +173,7 @@ class UniHubRepository {
         .eq('semester_label', semesterLabel)
         .eq('name', subjectName)
         .eq('time_label', pendingCourseTimeLabel);
-    _notifyCoursesChanged();
+    _notifyAcademicDataChanged();
   }
 
   Future<int> deleteSubjectCourses({
@@ -194,7 +194,7 @@ class UniHubRepository {
         .select('id');
 
     if (deletedRows.isNotEmpty) {
-      _notifyCoursesChanged();
+      _notifyAcademicDataChanged();
     }
     return deletedRows.length;
   }
@@ -217,7 +217,7 @@ class UniHubRepository {
         .select('id');
 
     if (deletedRows.isNotEmpty) {
-      _notifyCoursesChanged();
+      _notifyAcademicDataChanged();
     }
     return deletedRows.length;
   }
@@ -251,7 +251,7 @@ class UniHubRepository {
         .select('id');
 
     if (updatedRows.isNotEmpty) {
-      _notifyCoursesChanged();
+      _notifyAcademicDataChanged();
     }
     return updatedRows.length;
   }
@@ -263,7 +263,7 @@ class UniHubRepository {
     }
 
     await _client.from('courses').delete().eq('user_id', user.id);
-    _notifyCoursesChanged();
+    _notifyAcademicDataChanged();
   }
 
   Future<void> replaceUserCourses(List<Course> courses) async {
@@ -275,7 +275,7 @@ class UniHubRepository {
     await _client.from('courses').delete().eq('user_id', user.id);
 
     if (courses.isEmpty) {
-      _notifyCoursesChanged();
+      _notifyAcademicDataChanged();
       return;
     }
 
@@ -297,7 +297,7 @@ class UniHubRepository {
         .toList(growable: false);
 
     await _client.from('courses').insert(payload);
-    _notifyCoursesChanged();
+    _notifyAcademicDataChanged();
   }
 
   Future<Map<String, double>> fetchGradeTypeWeights() async {
@@ -777,7 +777,11 @@ class UniHubRepository {
     if (rows.isEmpty) {
       throw StateError('Subject not found.');
     }
-    return AcademicSubjectV2.fromMap(rows.first as Map<String, dynamic>);
+    final AcademicSubjectV2 saved = AcademicSubjectV2.fromMap(
+      rows.first as Map<String, dynamic>,
+    );
+    _notifyAcademicDataChanged();
+    return saved;
   }
 
   Future<void> deleteSubjectV2(String subjectId) async {
@@ -792,6 +796,7 @@ class UniHubRepository {
         .delete()
         .eq('user_id', user.id)
         .eq('id', normalizedId);
+    _notifyAcademicDataChanged();
   }
 
   Future<List<ClassSession>> fetchClassSessionsV2({String? subjectId}) async {
@@ -846,7 +851,11 @@ class UniHubRepository {
     if (rows.isEmpty) {
       throw StateError('Class session not found.');
     }
-    return ClassSession.fromMap(rows.first as Map<String, dynamic>);
+    final ClassSession saved = ClassSession.fromMap(
+      rows.first as Map<String, dynamic>,
+    );
+    _notifyAcademicDataChanged();
+    return saved;
   }
 
   Future<void> deleteClassSessionV2(String classSessionId) async {
@@ -861,6 +870,7 @@ class UniHubRepository {
         .delete()
         .eq('user_id', user.id)
         .eq('id', normalizedId);
+    _notifyAcademicDataChanged();
   }
 
   Future<List<AcademicEvent>> fetchAcademicEventsV2({
@@ -933,7 +943,11 @@ class UniHubRepository {
     if (rows.isEmpty) {
       throw StateError('Academic event not found.');
     }
-    return AcademicEvent.fromMap(rows.first as Map<String, dynamic>);
+    final AcademicEvent saved = AcademicEvent.fromMap(
+      rows.first as Map<String, dynamic>,
+    );
+    _notifyAcademicDataChanged();
+    return saved;
   }
 
   Future<void> deleteAcademicEventV2(String academicEventId) async {
@@ -948,6 +962,7 @@ class UniHubRepository {
         .delete()
         .eq('user_id', user.id)
         .eq('id', normalizedId);
+    _notifyAcademicDataChanged();
   }
 
   Future<List<GradeComponentRecord>> fetchGradeComponentsV2({
@@ -1003,7 +1018,11 @@ class UniHubRepository {
     if (rows.isEmpty) {
       throw StateError('Grade component not found.');
     }
-    return GradeComponentRecord.fromMap(rows.first as Map<String, dynamic>);
+    final GradeComponentRecord saved = GradeComponentRecord.fromMap(
+      rows.first as Map<String, dynamic>,
+    );
+    _notifyAcademicDataChanged();
+    return saved;
   }
 
   Future<List<StudyTask>> fetchStudyTasksV2({
