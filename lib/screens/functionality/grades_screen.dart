@@ -29,7 +29,7 @@ class GradesScreen extends StatefulWidget {
 class _GradesScreenState extends State<GradesScreen> {
   final UniHubRepository _repository = UniHubRepository.instance;
   static const String _allSubjectsValue = '__all__';
-  static const List<String> _courseTypeOptions = <String>[
+  static const List<String> _gradeComponentOptions = <String>[
     'Examen',
     'Seminar',
     'Laborator',
@@ -37,7 +37,7 @@ class _GradesScreenState extends State<GradesScreen> {
     'Activitate pe parcurs',
     'Alta componenta',
   ];
-  static const List<String> _weightTypeOptions = <String>[
+  static const List<String> _weightedComponentOptions = <String>[
     'Examen',
     'Seminar',
     'Laborator',
@@ -280,14 +280,14 @@ class _GradesScreenState extends State<GradesScreen> {
       }
 
       final String subjectName = parts[0].trim();
-      final String courseType = parts[1].trim();
+      final String componentName = parts[1].trim();
       final double? parsedValue = switch (value) {
         num numericValue => numericValue.toDouble(),
         String textValue => double.tryParse(textValue),
         _ => null,
       };
 
-      if (subjectName.isEmpty || courseType.isEmpty) {
+      if (subjectName.isEmpty || componentName.isEmpty) {
         return;
       }
 
@@ -295,7 +295,7 @@ class _GradesScreenState extends State<GradesScreen> {
         return;
       }
 
-      gradesByLegacyKey['$subjectName|${_canonicalComponentName(courseType)}'] =
+      gradesByLegacyKey['$subjectName|${_canonicalComponentName(componentName)}'] =
           parsedValue;
     });
 
@@ -373,16 +373,18 @@ class _GradesScreenState extends State<GradesScreen> {
       );
     }
 
-    return byName.values.toList(growable: false)..sort((
-      GradeComponentRecord a,
-      GradeComponentRecord b,
-    ) {
-      final int aIndex = _courseTypeOptions.indexOf(a.name);
-      final int bIndex = _courseTypeOptions.indexOf(b.name);
-      final int normalizedA = aIndex == -1 ? _courseTypeOptions.length : aIndex;
-      final int normalizedB = bIndex == -1 ? _courseTypeOptions.length : bIndex;
-      return normalizedA.compareTo(normalizedB);
-    });
+    return byName.values.toList(growable: false)
+      ..sort((GradeComponentRecord a, GradeComponentRecord b) {
+        final int aIndex = _gradeComponentOptions.indexOf(a.name);
+        final int bIndex = _gradeComponentOptions.indexOf(b.name);
+        final int normalizedA = aIndex == -1
+            ? _gradeComponentOptions.length
+            : aIndex;
+        final int normalizedB = bIndex == -1
+            ? _gradeComponentOptions.length
+            : bIndex;
+        return normalizedA.compareTo(normalizedB);
+      });
   }
 
   GradeComponentRecord _recordForComponentName({
@@ -449,9 +451,9 @@ class _GradesScreenState extends State<GradesScreen> {
     );
   }
 
-  Future<void> _saveTypeGrade({
+  Future<void> _saveComponentGrade({
     required String subjectName,
-    required String courseType,
+    required String componentName,
     required double? value,
   }) async {
     try {
@@ -460,7 +462,7 @@ class _GradesScreenState extends State<GradesScreen> {
       final GradeComponentRecord component = _recordForComponentName(
         subject: subject,
         data: data,
-        componentName: courseType,
+        componentName: componentName,
       );
       await _repository.upsertGradeComponentV2(
         _componentWithGrade(component, value),
@@ -475,14 +477,14 @@ class _GradesScreenState extends State<GradesScreen> {
     }
   }
 
-  Future<void> _saveTypeWeights({
+  Future<void> _saveComponentWeights({
     required String subjectName,
-    required Map<String, double> weightsByType,
+    required Map<String, double> weightsByComponent,
   }) async {
     try {
       final _GradesData data = await _gradesDataFuture;
       final AcademicSubjectV2 subject = _findSubjectByName(data, subjectName);
-      for (final String componentName in _activeWeightTypes(
+      for (final String componentName in _activeWeightedComponents(
         subjectName: subjectName,
         data: data,
       )) {
@@ -492,7 +494,10 @@ class _GradesScreenState extends State<GradesScreen> {
           componentName: componentName,
         );
         await _repository.upsertGradeComponentV2(
-          _componentWithWeight(component, weightsByType[componentName] ?? 0),
+          _componentWithWeight(
+            component,
+            weightsByComponent[componentName] ?? 0,
+          ),
         );
       }
       _refreshAcademicData();
@@ -505,16 +510,16 @@ class _GradesScreenState extends State<GradesScreen> {
     }
   }
 
-  Future<void> _resetTypeWeights(String subjectName) async {
-    await _saveTypeWeights(
+  Future<void> _resetComponentWeights(String subjectName) async {
+    await _saveComponentWeights(
       subjectName: subjectName,
-      weightsByType: <String, double>{},
+      weightsByComponent: <String, double>{},
     );
   }
 
-  Future<void> _openTypeGradeDialog(
+  Future<void> _openComponentGradeDialog(
     String subjectName,
-    String courseType,
+    String componentName,
   ) async {
     final _GradesData data;
     try {
@@ -535,12 +540,12 @@ class _GradesScreenState extends State<GradesScreen> {
     final GradeComponentRecord component = _recordForComponentName(
       subject: subject,
       data: data,
-      componentName: courseType,
+      componentName: componentName,
     );
     final double? existing = component.grade;
 
-    final _TypeGradeDialogResult? result =
-        await showDialog<_TypeGradeDialogResult>(
+    final _ComponentGradeDialogResult? result =
+        await showDialog<_ComponentGradeDialogResult>(
           context: context,
           builder: (BuildContext dialogContext) {
             final TextEditingController controller = TextEditingController(
@@ -555,7 +560,7 @@ class _GradesScreenState extends State<GradesScreen> {
                     void Function(void Function()) setModalState,
                   ) {
                     return AlertDialog(
-                      title: Text('$subjectName - $courseType'),
+                      title: Text('$subjectName - $componentName'),
                       content: TextField(
                         controller: controller,
                         autofocus: true,
@@ -574,7 +579,7 @@ class _GradesScreenState extends State<GradesScreen> {
                             onPressed: () {
                               Navigator.of(
                                 dialogContext,
-                              ).pop(const _TypeGradeDialogResult.delete());
+                              ).pop(const _ComponentGradeDialogResult.delete());
                             },
                             child: const Text('Sterge nota'),
                           ),
@@ -595,7 +600,9 @@ class _GradesScreenState extends State<GradesScreen> {
                             }
 
                             Navigator.of(dialogContext).pop(
-                              _TypeGradeDialogResult.save(parsed.toDouble()),
+                              _ComponentGradeDialogResult.save(
+                                parsed.toDouble(),
+                              ),
                             );
                           },
                           child: const Text('Salveaza'),
@@ -611,14 +618,14 @@ class _GradesScreenState extends State<GradesScreen> {
       return;
     }
 
-    await _saveTypeGrade(
+    await _saveComponentGrade(
       subjectName: subjectName,
-      courseType: courseType,
+      componentName: componentName,
       value: result.delete ? null : result.value,
     );
   }
 
-  Future<void> _openTypeWeightDialog(String subjectName) async {
+  Future<void> _openComponentWeightDialog(String subjectName) async {
     final _GradesData data;
     try {
       data = await _gradesDataFuture;
@@ -636,29 +643,29 @@ class _GradesScreenState extends State<GradesScreen> {
     }
 
     final AcademicSubjectV2 subject = _findSubjectByName(data, subjectName);
-    final List<String> activeWeightTypes = _activeWeightTypes(
+    final List<String> activeWeightedComponents = _activeWeightedComponents(
       subjectName: subjectName,
       data: data,
     );
     final Map<String, double?> existing = <String, double?>{};
-    for (final String courseType in activeWeightTypes) {
-      existing[courseType] = _recordForComponentName(
+    for (final String componentName in activeWeightedComponents) {
+      existing[componentName] = _recordForComponentName(
         subject: subject,
         data: data,
-        componentName: courseType,
+        componentName: componentName,
       ).weightPercent;
     }
 
     final Map<String, TextEditingController> controllers =
         <String, TextEditingController>{
-          for (final String courseType in activeWeightTypes)
-            courseType: TextEditingController(
-              text: existing[courseType]?.toString() ?? '',
+          for (final String componentName in activeWeightedComponents)
+            componentName: TextEditingController(
+              text: existing[componentName]?.toString() ?? '',
             ),
         };
 
-    final _TypeWeightDialogResult?
-    result = await showDialog<_TypeWeightDialogResult>(
+    final _ComponentWeightDialogResult?
+    result = await showDialog<_ComponentWeightDialogResult>(
       context: context,
       builder: (BuildContext dialogContext) {
         String? errorText;
@@ -682,16 +689,16 @@ class _GradesScreenState extends State<GradesScreen> {
                   content: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
-                      ...activeWeightTypes.map(
-                        (String courseType) => Padding(
+                      ...activeWeightedComponents.map(
+                        (String componentName) => Padding(
                           padding: const EdgeInsets.only(bottom: 10),
                           child: TextField(
-                            controller: controllers[courseType],
+                            controller: controllers[componentName],
                             keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,
                             ),
                             decoration: InputDecoration(
-                              labelText: '$courseType (%)',
+                              labelText: '$componentName (%)',
                             ),
                           ),
                         ),
@@ -714,7 +721,7 @@ class _GradesScreenState extends State<GradesScreen> {
                         onPressed: () {
                           Navigator.of(
                             dialogContext,
-                          ).pop(const _TypeWeightDialogResult.delete());
+                          ).pop(const _ComponentWeightDialogResult.delete());
                         },
                         child: const Text('Reseteaza ponderi'),
                       ),
@@ -727,9 +734,10 @@ class _GradesScreenState extends State<GradesScreen> {
                         final Map<String, double> parsed = <String, double>{};
                         double total = 0;
 
-                        for (final String courseType in activeWeightTypes) {
+                        for (final String componentName
+                            in activeWeightedComponents) {
                           final double value = parseValue(
-                            controllers[courseType]?.text ?? '',
+                            controllers[componentName]?.text ?? '',
                           );
 
                           if (value.isNaN || value < 0 || value > 100) {
@@ -742,7 +750,7 @@ class _GradesScreenState extends State<GradesScreen> {
 
                           total += value;
                           if (value > 0) {
-                            parsed[courseType] = value;
+                            parsed[componentName] = value;
                           }
                         }
 
@@ -755,7 +763,7 @@ class _GradesScreenState extends State<GradesScreen> {
 
                         Navigator.of(
                           dialogContext,
-                        ).pop(_TypeWeightDialogResult.save(parsed));
+                        ).pop(_ComponentWeightDialogResult.save(parsed));
                       },
                       child: const Text('Salveaza'),
                     ),
@@ -771,33 +779,33 @@ class _GradesScreenState extends State<GradesScreen> {
     }
 
     if (result.delete) {
-      await _resetTypeWeights(subjectName);
+      await _resetComponentWeights(subjectName);
       return;
     }
 
-    await _saveTypeWeights(
+    await _saveComponentWeights(
       subjectName: subjectName,
-      weightsByType: result.weightsByType,
+      weightsByComponent: result.weightsByComponent,
     );
   }
 
-  List<String> _activeWeightTypes({
+  List<String> _activeWeightedComponents({
     required String subjectName,
     required _GradesData data,
   }) {
     final AcademicSubjectV2 subject = _findSubjectByName(data, subjectName);
-    final Set<String> activeTypes =
+    final Set<String> activeComponents =
         _recordsForSubject(subject: subject, data: data)
             .map((GradeComponentRecord component) => component.name)
-            .where(_weightTypeOptions.contains)
+            .where(_weightedComponentOptions.contains)
             .toSet();
 
-    if (activeTypes.isEmpty) {
-      activeTypes.add('Examen');
+    if (activeComponents.isEmpty) {
+      activeComponents.add('Examen');
     }
 
-    return _weightTypeOptions
-        .where(activeTypes.contains)
+    return _weightedComponentOptions
+        .where(activeComponents.contains)
         .toList(growable: false);
   }
 
@@ -848,13 +856,13 @@ class _GradesScreenState extends State<GradesScreen> {
             })
             .toList(growable: false)
           ..sort((GradeComponent a, GradeComponent b) {
-            final int aIndex = _courseTypeOptions.indexOf(a.name);
-            final int bIndex = _courseTypeOptions.indexOf(b.name);
+            final int aIndex = _gradeComponentOptions.indexOf(a.name);
+            final int bIndex = _gradeComponentOptions.indexOf(b.name);
             final int normalizedA = aIndex == -1
-                ? _courseTypeOptions.length
+                ? _gradeComponentOptions.length
                 : aIndex;
             final int normalizedB = bIndex == -1
-                ? _courseTypeOptions.length
+                ? _gradeComponentOptions.length
                 : bIndex;
             return normalizedA.compareTo(normalizedB);
           });
@@ -991,30 +999,31 @@ class _GradesScreenState extends State<GradesScreen> {
           subjectOptions: subjectOptions,
           onSubjectChanged: _changeSelectedSubject,
           totalSubjectsCount: subjectOptions.length - 1,
-          onEditTypeGrade: _openTypeGradeDialog,
-          onEditTypeWeights: _openTypeWeightDialog,
-          onResetTypeWeights: _resetTypeWeights,
+          onEditComponentGrade: _openComponentGradeDialog,
+          onEditComponentWeights: _openComponentWeightDialog,
+          onResetComponentWeights: _resetComponentWeights,
         );
       },
     );
   }
 }
 
-class _TypeGradeDialogResult {
-  const _TypeGradeDialogResult.save(this.value) : delete = false;
-  const _TypeGradeDialogResult.delete() : value = null, delete = true;
+class _ComponentGradeDialogResult {
+  const _ComponentGradeDialogResult.save(this.value) : delete = false;
+  const _ComponentGradeDialogResult.delete() : value = null, delete = true;
 
   final double? value;
   final bool delete;
 }
 
-class _TypeWeightDialogResult {
-  const _TypeWeightDialogResult.save(this.weightsByType) : delete = false;
-  const _TypeWeightDialogResult.delete()
-    : weightsByType = const <String, double>{},
+class _ComponentWeightDialogResult {
+  const _ComponentWeightDialogResult.save(this.weightsByComponent)
+    : delete = false;
+  const _ComponentWeightDialogResult.delete()
+    : weightsByComponent = const <String, double>{},
       delete = true;
 
-  final Map<String, double> weightsByType;
+  final Map<String, double> weightsByComponent;
   final bool delete;
 }
 

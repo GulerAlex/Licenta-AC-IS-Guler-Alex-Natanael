@@ -25,9 +25,9 @@ class GradesScreenView extends StatefulWidget {
     required this.subjectOptions,
     required this.onSubjectChanged,
     required this.totalSubjectsCount,
-    required this.onEditTypeGrade,
-    required this.onEditTypeWeights,
-    required this.onResetTypeWeights,
+    required this.onEditComponentGrade,
+    required this.onEditComponentWeights,
+    required this.onResetComponentWeights,
   });
 
   final List<SubjectNoteCardData> subjectCards;
@@ -40,10 +40,10 @@ class GradesScreenView extends StatefulWidget {
   final List<String> subjectOptions;
   final ValueChanged<String> onSubjectChanged;
   final int totalSubjectsCount;
-  final Future<void> Function(String subjectName, String courseType)
-  onEditTypeGrade;
-  final Future<void> Function(String subjectName) onEditTypeWeights;
-  final Future<void> Function(String subjectName) onResetTypeWeights;
+  final Future<void> Function(String subjectName, String componentName)
+  onEditComponentGrade;
+  final Future<void> Function(String subjectName) onEditComponentWeights;
+  final Future<void> Function(String subjectName) onResetComponentWeights;
 
   @override
   State<GradesScreenView> createState() => _GradesScreenViewState();
@@ -90,9 +90,9 @@ class _GradesScreenViewState extends State<GradesScreenView> {
                     padding: const EdgeInsets.only(bottom: 16),
                     child: _SubjectNoteCard(
                       card: card,
-                      onEditTypeGrade: widget.onEditTypeGrade,
-                      onEditTypeWeights: widget.onEditTypeWeights,
-                      onResetTypeWeights: widget.onResetTypeWeights,
+                      onEditComponentGrade: widget.onEditComponentGrade,
+                      onEditComponentWeights: widget.onEditComponentWeights,
+                      onResetComponentWeights: widget.onResetComponentWeights,
                     ),
                   ),
                 ),
@@ -273,16 +273,16 @@ class _GradesScreenViewState extends State<GradesScreenView> {
 class _SubjectNoteCard extends StatefulWidget {
   const _SubjectNoteCard({
     required this.card,
-    required this.onEditTypeGrade,
-    required this.onEditTypeWeights,
-    required this.onResetTypeWeights,
+    required this.onEditComponentGrade,
+    required this.onEditComponentWeights,
+    required this.onResetComponentWeights,
   });
 
   final SubjectNoteCardData card;
-  final Future<void> Function(String subjectName, String courseType)
-  onEditTypeGrade;
-  final Future<void> Function(String subjectName) onEditTypeWeights;
-  final Future<void> Function(String subjectName) onResetTypeWeights;
+  final Future<void> Function(String subjectName, String componentName)
+  onEditComponentGrade;
+  final Future<void> Function(String subjectName) onEditComponentWeights;
+  final Future<void> Function(String subjectName) onResetComponentWeights;
 
   @override
   State<_SubjectNoteCard> createState() => _SubjectNoteCardState();
@@ -419,8 +419,9 @@ class _SubjectNoteCardState extends State<_SubjectNoteCard> {
                   Row(
                     children: <Widget>[
                       TextButton.icon(
-                        onPressed: () =>
-                            widget.onEditTypeWeights(widget.card.subjectName),
+                        onPressed: () => widget.onEditComponentWeights(
+                          widget.card.subjectName,
+                        ),
                         icon: Icon(
                           Icons.tune_rounded,
                           size: 18,
@@ -432,8 +433,9 @@ class _SubjectNoteCardState extends State<_SubjectNoteCard> {
                         ),
                       ),
                       TextButton.icon(
-                        onPressed: () =>
-                            widget.onResetTypeWeights(widget.card.subjectName),
+                        onPressed: () => widget.onResetComponentWeights(
+                          widget.card.subjectName,
+                        ),
                         icon: Icon(
                           Icons.refresh_rounded,
                           size: 18,
@@ -451,10 +453,10 @@ class _SubjectNoteCardState extends State<_SubjectNoteCard> {
                   ...subject.components.map(
                     (GradeComponent component) => Padding(
                       padding: const EdgeInsets.only(bottom: 8),
-                      child: _TypeGradeTile(
+                      child: _ComponentGradeTile(
                         subjectName: widget.card.subjectName,
                         component: component,
-                        onEditTypeGrade: widget.onEditTypeGrade,
+                        onEditComponentGrade: widget.onEditComponentGrade,
                       ),
                     ),
                   ),
@@ -503,17 +505,17 @@ class _SubjectNoteCardState extends State<_SubjectNoteCard> {
   }
 }
 
-class _TypeGradeTile extends StatelessWidget {
-  const _TypeGradeTile({
+class _ComponentGradeTile extends StatelessWidget {
+  const _ComponentGradeTile({
     required this.subjectName,
     required this.component,
-    required this.onEditTypeGrade,
+    required this.onEditComponentGrade,
   });
 
   final String subjectName;
   final GradeComponent component;
-  final Future<void> Function(String subjectName, String courseType)
-  onEditTypeGrade;
+  final Future<void> Function(String subjectName, String componentName)
+  onEditComponentGrade;
 
   @override
   Widget build(BuildContext context) {
@@ -521,7 +523,7 @@ class _TypeGradeTile extends StatelessWidget {
 
     return InkWell(
       borderRadius: BorderRadius.circular(12),
-      onTap: () => onEditTypeGrade(subjectName, component.name),
+      onTap: () => onEditComponentGrade(subjectName, component.name),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
