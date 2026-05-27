@@ -29,6 +29,17 @@ flutter analyze
 flutter test
 ```
 
+Au fost verificate manual fluxurile sensibile:
+
+- login/signup
+- configurare facultate, an de studiu si grupa
+- adaugare materie
+- adaugare activitate
+- adaugare examen
+- editare profil
+
+README-ul proiectului a fost actualizat cu instructiuni de rulare si flow demo pentru licenta.
+
 Repository-ul a fost impins pe GitHub dupa modificarile MVP.
 
 ## Supabase
@@ -69,15 +80,11 @@ Pentru prezentare sau test final:
 
 Prioritate mare:
 
-- test complet pe telefon/emulator dupa restart
-- verificare texte taiate sau overflow pe ecrane mici
-- verificare dialoguri cand apare tastatura
 - verificare notificari pe device real
 - creare cont demo curat pentru licenta
 
 Prioritate medie:
 
-- README/demo guide pentru licenta
 - capturi ecran curate pentru documentatie
 - verificare build APK final
 - verificare daca mai exista texte in engleza in UI
